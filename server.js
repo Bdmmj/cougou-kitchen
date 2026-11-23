@@ -121,6 +121,25 @@ db.exec(`
   );
 
   CREATE INDEX IF NOT EXISTS idx_invites_kitchen ON invites (kitchen_id, revoked, expires_at);
+
+  CREATE TABLE IF NOT EXISTS sleep_logs (
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    date TEXT NOT NULL,
+    bedtime TEXT NOT NULL,
+    wake_time TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (user_id, date)
+  );
+
+  CREATE TABLE IF NOT EXISTS exercise_logs (
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    date TEXT NOT NULL,
+    calories INTEGER NOT NULL CHECK (calories >= 0 AND calories <= 5000),
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (user_id, date)
+  );
 `);
 
 // Migrate databases created before the admin console existed.
@@ -1592,6 +1611,115 @@ async function handleClearDay(req, res, user, kitchenId, url) {
 }
 
 /* =========================================================
+   Personal wellness: sleep plan + exercise burn
+   ========================================================= */
+
+function isValidClock(value) {
+  return typeof value === "string" && /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
+}
+
+function sleepDurationMinutes(bedtime, wakeTime) {
+  const [bedHour, bedMinute] = bedtime.split(":").map(Number);
+  const [wakeHour, wakeMinute] = wakeTime.split(":").map(Number);
+  const bed = bedHour * 60 + bedMinute;
+  const wake = wakeHour * 60 + wakeMinute;
+  return wake > bed ? wake - bed : wake + 1440 - bed;
+}
+
+function getWellnessWeek(userId, weekStart) {
+  const dates = weekDateKeys(weekStart);
+  const sleepRows = db
+    .prepare(
+      `SELECT date, bedtime, wake_time, updated_at FROM sleep_logs
+       WHERE user_id = ? AND date >= ? AND date <= ?`,
+    )
+    .all(userId, dates[0], dates[6]);
+  const exerciseRows = db
+    .prepare(
+      `SELECT date, calories, updated_at FROM exercise_logs
+       WHERE user_id = ? AND date >= ? AND date <= ?`,
+    )
+    .all(userId, dates[0], dates[6]);
+  const sleepByDate = new Map(sleepRows.map((row) => [row.date, row]));
+  const exerciseByDate = new Map(exerciseRows.map((row) => [row.date, row]));
+  const days = {};
+  dates.forEach((date) => {
+    const sleep = sleepByDate.get(date);
+    const exercise = exerciseByDate.get(date);
+    days[date] = {
+      sleep: sleep
+        ? {
+            date: sleep.date,
+            bedtime: sleep.bedtime,
+            wakeTime: sleep.wake_time,
+            durationMinutes: sleepDurationMinutes(sleep.bedtime, sleep.wake_time),
+            updatedAt: sleep.updated_at,
+          }
+        : null,
+      exercise: exercise
+        ? { date: exercise.date, calories: exercise.calories, updatedAt: exercise.updated_at }
+        : null,
+    };
+  });
+  return { weekStart, days };
+}
+
+async function handleGetWellness(req, res, user, url) {
+  if (!user) throw new HttpError(401, "请先登录。");
+  const weekStart = normalizeWeekStart(url.searchParams.get("weekStart"));
+  sendJson(res, 200, getWellnessWeek(user.id, weekStart));
+}
+
+async function handleSaveSleep(req, res, user) {
+  if (!user) throw new HttpError(401, "请先登录。");
+  const body = await readJsonBody(req);
+  const date = String(body.date || "");
+  const bedtime = String(body.bedtime || "");
+  const wakeTime = String(body.wakeTime || "");
+  if (!parseDateKey(date)) throw new HttpError(400, "日期格式不正确。");
+  if (!isValidClock(bedtime) || !isValidClock(wakeTime)) {
+    throw new HttpError(400, "请填写有效的入睡和起床时间。");
+  }
+  if (bedtime === wakeTime) throw new HttpError(400, "入睡和起床时间不能相同。");
+  const weekStart = normalizeWeekStart(body.weekStart || dateKey(startOfWeek(parseDateKey(date))));
+  if (!weekDateKeys(weekStart).includes(date)) throw new HttpError(400, "日期不在当前周内。");
+
+  const now = nowISO();
+  db.prepare(
+    `INSERT INTO sleep_logs (user_id, date, bedtime, wake_time, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?)
+     ON CONFLICT(user_id, date) DO UPDATE SET
+       bedtime = excluded.bedtime,
+       wake_time = excluded.wake_time,
+       updated_at = excluded.updated_at`,
+  ).run(user.id, date, bedtime, wakeTime, now, now);
+  sendJson(res, 200, getWellnessWeek(user.id, weekStart));
+}
+
+async function handleSaveExercise(req, res, user) {
+  if (!user) throw new HttpError(401, "请先登录。");
+  const body = await readJsonBody(req);
+  const date = String(body.date || "");
+  const calories = Number(body.calories);
+  if (!parseDateKey(date)) throw new HttpError(400, "日期格式不正确。");
+  if (!Number.isFinite(calories) || calories < 0 || calories > 5000) {
+    throw new HttpError(400, "运动消耗需要在 0–5,000 kcal 之间。");
+  }
+  const weekStart = normalizeWeekStart(body.weekStart || dateKey(startOfWeek(parseDateKey(date))));
+  if (!weekDateKeys(weekStart).includes(date)) throw new HttpError(400, "日期不在当前周内。");
+
+  const now = nowISO();
+  db.prepare(
+    `INSERT INTO exercise_logs (user_id, date, calories, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT(user_id, date) DO UPDATE SET
+       calories = excluded.calories,
+       updated_at = excluded.updated_at`,
+  ).run(user.id, date, Math.round(calories), now, now);
+  sendJson(res, 200, getWellnessWeek(user.id, weekStart));
+}
+
+/* =========================================================
    Admin console data
    ========================================================= */
 
@@ -1940,6 +2068,18 @@ async function handleApi(req, res, url) {
   }
 
   const user = getSession(req);
+
+  if (pathname === "/api/wellness" && method === "GET") {
+    return handleGetWellness(req, res, user, url);
+  }
+
+  if (pathname === "/api/wellness/sleep" && method === "PUT") {
+    return handleSaveSleep(req, res, user);
+  }
+
+  if (pathname === "/api/wellness/exercise" && method === "PUT") {
+    return handleSaveExercise(req, res, user);
+  }
 
   if (pathname.startsWith("/api/admin/")) {
     await handleAdminApi(req, res, url, user);

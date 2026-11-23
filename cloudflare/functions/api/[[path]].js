@@ -1149,6 +1149,132 @@ async function handleClearDay(env, user, kitchenId, url) {
 }
 
 /* =========================================================
+   Personal wellness: sleep plan + exercise burn
+   ========================================================= */
+
+function isValidClock(value) {
+  return typeof value === "string" && /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
+}
+
+function sleepDurationMinutes(bedtime, wakeTime) {
+  const [bedHour, bedMinute] = bedtime.split(":").map(Number);
+  const [wakeHour, wakeMinute] = wakeTime.split(":").map(Number);
+  const bed = bedHour * 60 + bedMinute;
+  const wake = wakeHour * 60 + wakeMinute;
+  return wake > bed ? wake - bed : wake + 1440 - bed;
+}
+
+async function getWellnessWeek(env, userId, weekStart) {
+  const dates = weekDateKeys(weekStart);
+  const sleepRows = await all(
+    env,
+    `SELECT date, bedtime, wake_time, updated_at FROM sleep_logs
+     WHERE user_id = ? AND date >= ? AND date <= ?`,
+    userId,
+    dates[0],
+    dates[6],
+  );
+  const exerciseRows = await all(
+    env,
+    `SELECT date, calories, updated_at FROM exercise_logs
+     WHERE user_id = ? AND date >= ? AND date <= ?`,
+    userId,
+    dates[0],
+    dates[6],
+  );
+  const sleepByDate = new Map(sleepRows.map((row) => [row.date, row]));
+  const exerciseByDate = new Map(exerciseRows.map((row) => [row.date, row]));
+  const days = {};
+  dates.forEach((date) => {
+    const sleep = sleepByDate.get(date);
+    const exercise = exerciseByDate.get(date);
+    days[date] = {
+      sleep: sleep
+        ? {
+            date: sleep.date,
+            bedtime: sleep.bedtime,
+            wakeTime: sleep.wake_time,
+            durationMinutes: sleepDurationMinutes(sleep.bedtime, sleep.wake_time),
+            updatedAt: sleep.updated_at,
+          }
+        : null,
+      exercise: exercise
+        ? { date: exercise.date, calories: exercise.calories, updatedAt: exercise.updated_at }
+        : null,
+    };
+  });
+  return { weekStart, days };
+}
+
+async function handleGetWellness(env, user, url) {
+  if (!user) throw new HttpError(401, "请先登录。");
+  const weekStart = normalizeWeekStart(url.searchParams.get("weekStart"));
+  return json(await getWellnessWeek(env, user.id, weekStart));
+}
+
+async function handleSaveSleep(request, env, user) {
+  if (!user) throw new HttpError(401, "请先登录。");
+  const body = await readJson(request);
+  const date = String(body.date || "");
+  const bedtime = String(body.bedtime || "");
+  const wakeTime = String(body.wakeTime || "");
+  if (!parseDateKey(date)) throw new HttpError(400, "日期格式不正确。");
+  if (!isValidClock(bedtime) || !isValidClock(wakeTime)) {
+    throw new HttpError(400, "请填写有效的入睡和起床时间。");
+  }
+  if (bedtime === wakeTime) throw new HttpError(400, "入睡和起床时间不能相同。");
+  const weekStart = normalizeWeekStart(body.weekStart || dateKey(startOfWeek(parseDateKey(date))));
+  if (!weekDateKeys(weekStart).includes(date)) throw new HttpError(400, "日期不在当前周内。");
+
+  const now = nowISO();
+  await run(
+    env,
+    `INSERT INTO sleep_logs (user_id, date, bedtime, wake_time, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?)
+     ON CONFLICT(user_id, date) DO UPDATE SET
+       bedtime = excluded.bedtime,
+       wake_time = excluded.wake_time,
+       updated_at = excluded.updated_at`,
+    user.id,
+    date,
+    bedtime,
+    wakeTime,
+    now,
+    now,
+  );
+  return json(await getWellnessWeek(env, user.id, weekStart));
+}
+
+async function handleSaveExercise(request, env, user) {
+  if (!user) throw new HttpError(401, "请先登录。");
+  const body = await readJson(request);
+  const date = String(body.date || "");
+  const calories = Number(body.calories);
+  if (!parseDateKey(date)) throw new HttpError(400, "日期格式不正确。");
+  if (!Number.isFinite(calories) || calories < 0 || calories > 5000) {
+    throw new HttpError(400, "运动消耗需要在 0–5,000 kcal 之间。");
+  }
+  const weekStart = normalizeWeekStart(body.weekStart || dateKey(startOfWeek(parseDateKey(date))));
+  if (!weekDateKeys(weekStart).includes(date)) throw new HttpError(400, "日期不在当前周内。");
+
+  const now = nowISO();
+  await run(
+    env,
+    `INSERT INTO exercise_logs (user_id, date, calories, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT(user_id, date) DO UPDATE SET
+       calories = excluded.calories,
+       updated_at = excluded.updated_at`,
+    user.id,
+    date,
+    Math.round(calories),
+    now,
+    now,
+  );
+  return json(await getWellnessWeek(env, user.id, weekStart));
+}
+
+/* =========================================================
    Admin data
    ========================================================= */
 
@@ -1378,6 +1504,8 @@ async function handleAdminApi(request, env, url, user) {
       env.DB.prepare("DELETE FROM invites WHERE created_by = ?").bind(target.id),
       env.DB.prepare("DELETE FROM memberships WHERE user_id = ?").bind(target.id),
       env.DB.prepare("DELETE FROM sessions WHERE user_id = ?").bind(target.id),
+      env.DB.prepare("DELETE FROM sleep_logs WHERE user_id = ?").bind(target.id),
+      env.DB.prepare("DELETE FROM exercise_logs WHERE user_id = ?").bind(target.id),
       env.DB.prepare("DELETE FROM users WHERE id = ?").bind(target.id),
     ]);
     return json({ ok: true });
@@ -1446,6 +1574,18 @@ async function handleRequest(request, env) {
 
   if (pathname === "/api/auth/password" && method === "POST") {
     return handleChangePassword(request, env, user);
+  }
+
+  if (pathname === "/api/wellness" && method === "GET") {
+    return handleGetWellness(env, user, url);
+  }
+
+  if (pathname === "/api/wellness/sleep" && method === "PUT") {
+    return handleSaveSleep(request, env, user);
+  }
+
+  if (pathname === "/api/wellness/exercise" && method === "PUT") {
+    return handleSaveExercise(request, env, user);
   }
 
   if (pathname.startsWith("/api/admin/")) {

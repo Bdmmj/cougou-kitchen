@@ -27,6 +27,8 @@
     <symbol id="icon-chevron-right" viewBox="0 0 24 24"><path d="m9.5 6 6 6-6 6"/></symbol>
     <symbol id="icon-chevron-down" viewBox="0 0 24 24"><path d="m6 9.5 6 6 6-6"/></symbol>
     <symbol id="icon-close" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></symbol>
+    <symbol id="icon-moon" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4 8.2 8.2 0 1 0 20 14.5Z"/></symbol>
+    <symbol id="icon-activity" viewBox="0 0 24 24"><path d="M3 12h4l2.2-6 4.1 12 2.2-6H21"/></symbol>
     <symbol id="icon-target" viewBox="0 0 24 24">
       <circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r=".8" fill="currentColor" stroke="none"/>
     </symbol>
@@ -217,6 +219,10 @@ npm start</code></pre>
           <button class="nav-item" type="button" data-view="ingredients">
             <svg class="icon" aria-hidden="true"><use href="#icon-pantry"></use></svg>
             <span>食材库</span>
+          </button>
+          <button class="nav-item" type="button" data-view="wellness">
+            <svg class="icon" aria-hidden="true"><use href="#icon-moon"></use></svg>
+            <span>健康</span>
           </button>
           <button class="nav-item" type="button" data-view="kitchen">
             <svg class="icon" aria-hidden="true"><use href="#icon-users"></use></svg>
@@ -441,6 +447,93 @@ npm start</code></pre>
         <p class="library-note"><svg class="icon" aria-hidden="true"><use href="#icon-users"></use></svg>食材预设属于当前厨房，修改后会同步给所有成员；已加入食谱的食物不会自动改价。</p>
       </section>
 
+      <!-- ============ Wellness ============ -->
+      <section class="view shell" id="wellnessView" aria-labelledby="wellnessTitle" hidden>
+        <header class="view-head">
+          <div class="view-heading">
+            <p class="eyebrow"><span class="eyebrow-dash"></span>REST &amp; MOVE</p>
+            <h1 id="wellnessTitle">健康<span class="title-dot">.</span></h1>
+            <p class="view-lede">记录每天的睡眠计划和运动消耗，把身体的节奏也放进生活里。</p>
+          </div>
+          <div class="view-head-actions">
+            <span class="count-chip" id="wellnessRange">本周</span>
+            <span class="wellness-private">仅自己可见</span>
+          </div>
+        </header>
+
+        <div class="wellness-days" id="wellnessDays" aria-label="选择日期"></div>
+
+        <div class="wellness-grid">
+          <article class="wellness-card wellness-sleep">
+            <div class="wellness-card-head">
+              <span class="wellness-icon is-moon"><svg class="icon" aria-hidden="true"><use href="#icon-moon"></use></svg></span>
+              <div>
+                <p class="card-kicker">SLEEP PLAN</p>
+                <h2>睡眠计划</h2>
+              </div>
+            </div>
+            <p class="wellness-copy">预计这一天的入睡和起床时间，自动计算睡眠时长。</p>
+            <div class="sleep-time-grid">
+              <label class="wellness-field">
+                <span>预计入睡</span>
+                <input class="wellness-time" id="sleepBedtime" type="time" step="300">
+              </label>
+              <span class="sleep-arrow" aria-hidden="true">→</span>
+              <label class="wellness-field">
+                <span>预计起床</span>
+                <input class="wellness-time" id="sleepWake" type="time" step="300">
+              </label>
+            </div>
+            <div class="sleep-duration" aria-live="polite">
+              <span>预计睡眠</span>
+              <strong id="sleepDuration">—</strong>
+            </div>
+            <button class="button button-primary wellness-save" id="saveSleep" type="button">
+              <svg class="icon" aria-hidden="true"><use href="#icon-check"></use></svg>
+              保存睡眠
+            </button>
+            <p class="wellness-hint" id="sleepHint">只用于你自己的记录，不会分享给厨房成员。</p>
+          </article>
+
+          <article class="wellness-card wellness-exercise">
+            <div class="wellness-card-head">
+              <span class="wellness-icon is-activity"><svg class="icon" aria-hidden="true"><use href="#icon-activity"></use></svg></span>
+              <div>
+                <p class="card-kicker">ACTIVITY LOG</p>
+                <h2>运动消耗</h2>
+              </div>
+            </div>
+            <p class="wellness-copy">手动记录这一天运动消耗的热量数，不包含基础代谢。</p>
+            <div class="exercise-number">
+              <input id="exerciseCalories" type="number" min="0" max="5000" step="1" inputmode="decimal" placeholder="0" aria-label="今日运动消耗热量">
+              <span>kcal</span>
+            </div>
+            <div class="exercise-quick" id="exerciseQuick" role="group" aria-label="快速填写运动消耗">
+              <button type="button" data-exercise-quick="100">+100</button>
+              <button type="button" data-exercise-quick="200">+200</button>
+              <button type="button" data-exercise-quick="300">+300</button>
+              <button type="button" data-exercise-quick="500">+500</button>
+            </div>
+            <button class="button button-primary wellness-save" id="saveExercise" type="button">
+              <svg class="icon" aria-hidden="true"><use href="#icon-check"></use></svg>
+              保存运动
+            </button>
+            <p class="wellness-hint" id="exerciseHint">记录运动消耗，不改变食谱里的摄入热量。</p>
+          </article>
+        </div>
+
+        <section class="wellness-summary-card">
+          <div class="card-heading">
+            <div>
+              <p class="card-kicker">THIS WEEK</p>
+              <h2>本周记录</h2>
+            </div>
+            <span class="member-hint">睡眠与运动均为个人记录</span>
+          </div>
+          <div class="wellness-summary" id="wellnessSummary"></div>
+        </section>
+      </section>
+
       <!-- ============ Kitchen ============ -->
       <section class="view shell" id="kitchenView" aria-labelledby="kitchenTitle" hidden>
         <header class="view-head">
@@ -599,6 +692,10 @@ npm start</code></pre>
       <button class="mobile-tab" type="button" data-view="ingredients">
         <svg class="icon" aria-hidden="true"><use href="#icon-pantry"></use></svg>
         <span>食材库</span>
+      </button>
+      <button class="mobile-tab" type="button" data-view="wellness">
+        <svg class="icon" aria-hidden="true"><use href="#icon-moon"></use></svg>
+        <span>健康</span>
       </button>
       <button class="mobile-tab" type="button" data-view="kitchen">
         <svg class="icon" aria-hidden="true"><use href="#icon-users"></use></svg>

@@ -73,3 +73,22 @@ CREATE TABLE IF NOT EXISTS invites (
   created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_invites_kitchen ON invites (kitchen_id, revoked, expires_at);
+
+CREATE TABLE IF NOT EXISTS sleep_logs (
+  user_id TEXT NOT NULL,
+  date TEXT NOT NULL,
+  bedtime TEXT NOT NULL,
+  wake_time TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (user_id, date)
+);
+
+CREATE TABLE IF NOT EXISTS exercise_logs (
+  user_id TEXT NOT NULL,
+  date TEXT NOT NULL,
+  calories INTEGER NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (user_id, date)
+);

@@ -78,6 +78,10 @@
     presetQuery: "",
     presetCategory: "all",
     presetPanelOpen: false,
+    wellnessWeekStart: null,
+    wellnessDate: null,
+    wellnessDays: null,
+    wellnessLoading: false,
   };
 
   const dom = {};
@@ -285,7 +289,7 @@
 
   function viewFromHash() {
     const raw = location.hash.replace(/^#\/?/, "").split("?")[0];
-    return ["planner", "ingredients", "kitchen"].includes(raw) ? raw : "planner";
+    return ["planner", "ingredients", "wellness", "kitchen"].includes(raw) ? raw : "planner";
   }
 
   /* =========================================================
@@ -567,6 +571,10 @@
 
   function showAuth() {
     disconnectStream();
+    state.wellnessWeekStart = null;
+    state.wellnessDate = null;
+    state.wellnessDays = null;
+    state.wellnessLoading = false;
     dom.bootScreen.hidden = true;
     dom.appView.hidden = true;
     dom.authView.hidden = false;
@@ -1660,6 +1668,222 @@
   }
 
   /* =========================================================
+     Personal wellness
+     ========================================================= */
+
+  function formatSleepDuration(minutes) {
+    if (!Number.isFinite(minutes) || minutes <= 0) return "—";
+    const hours = Math.floor(minutes / 60);
+    const rest = minutes % 60;
+    if (hours && rest) return `${hours} 小时 ${rest} 分`;
+    if (hours) return `${hours} 小时`;
+    return `${rest} 分钟`;
+  }
+
+  function sleepMinutesFromInputs(bedtime, wakeTime) {
+    if (!bedtime || !wakeTime) return null;
+    const [bedHour, bedMinute] = bedtime.split(":").map(Number);
+    const [wakeHour, wakeMinute] = wakeTime.split(":").map(Number);
+    if ([bedHour, bedMinute, wakeHour, wakeMinute].some((part) => !Number.isFinite(part))) {
+      return null;
+    }
+    const bed = bedHour * 60 + bedMinute;
+    const wake = wakeHour * 60 + wakeMinute;
+    return wake > bed ? wake - bed : wake + 1440 - bed;
+  }
+
+  function updateSleepDurationPreview() {
+    const bed = dom.sleepBedtime.value;
+    const wake = dom.sleepWake.value;
+    if (!bed || !wake) {
+      dom.sleepDuration.textContent = "—";
+      return;
+    }
+    if (bed === wake) {
+      dom.sleepDuration.textContent = "时间相同";
+      return;
+    }
+    dom.sleepDuration.textContent = formatSleepDuration(sleepMinutesFromInputs(bed, wake));
+  }
+
+  function ensureWellnessState() {
+    const weekStart = dateKey(startOfWeek(new Date()));
+    if (!state.wellnessWeekStart) state.wellnessWeekStart = weekStart;
+    if (!state.wellnessDate) state.wellnessDate = dateKey(new Date());
+    return state.wellnessWeekStart;
+  }
+
+  function renderWellnessDays(dates) {
+    const todayKey = dateKey(new Date());
+    dom.wellnessDays.innerHTML = dates
+      .map((date, index) => {
+        const key = dateKey(date);
+        const day = state.wellnessDays?.[key];
+        const active = key === state.wellnessDate;
+        return `
+          <button
+            class="wellness-day-button${active ? " is-active" : ""}${key === todayKey ? " is-today" : ""}${day?.sleep ? " has-sleep" : ""}${day?.exercise ? " has-exercise" : ""}"
+            type="button"
+            data-wellness-day="${key}"
+            aria-pressed="${active}"
+          >
+            <span class="wellness-day-name">${DAY_SHORT[index]}</span>
+            <span class="wellness-day-date">${date.getDate()}</span>
+            <span class="wellness-day-marker" aria-hidden="true"></span>
+          </button>
+        `;
+      })
+      .join("");
+  }
+
+  function renderWellnessSummary(dates) {
+    if (!state.wellnessDays) {
+      dom.wellnessSummary.innerHTML = `<p class="wellness-summary-loading">正在读取本周记录…</p>`;
+      return;
+    }
+    const todayKey = dateKey(new Date());
+    dom.wellnessSummary.innerHTML = `
+      <div class="wellness-summary-head" aria-hidden="true">
+        <span>日期</span><span>睡眠</span><span>运动</span>
+      </div>
+      ${dates
+        .map((date, index) => {
+          const key = dateKey(date);
+          const day = state.wellnessDays[key];
+          const selected = key === state.wellnessDate;
+          return `
+            <button class="wellness-summary-row${selected ? " is-selected" : ""}" type="button" data-wellness-day="${key}">
+              <span class="wellness-summary-date">${DAY_NAMES[index]} ${date.getMonth() + 1}/${date.getDate()}${key === todayKey ? " · 今天" : ""}</span>
+              <span>${day?.sleep ? formatSleepDuration(day.sleep.durationMinutes) : '<span class="wellness-summary-empty">—</span>'}</span>
+              <span>${day?.exercise ? `${formatNumber(day.exercise.calories)} kcal` : '<span class="wellness-summary-empty">—</span>'}</span>
+            </button>
+          `;
+        })
+        .join("")}
+    `;
+  }
+
+  function renderWellness() {
+    if (!state.user) return;
+    const weekStart = ensureWellnessState();
+    const dates = getWeekDates(parseDateKey(weekStart));
+    if (!dates.some((date) => dateKey(date) === state.wellnessDate)) {
+      state.wellnessDate = dateKey(dates[0]);
+    }
+    const start = dates[0];
+    const end = dates[6];
+    dom.wellnessRange.textContent = formatRange(start, end);
+    renderWellnessDays(dates);
+    renderWellnessSummary(dates);
+
+    const day = state.wellnessDays?.[state.wellnessDate] || { sleep: null, exercise: null };
+    dom.sleepBedtime.value = day.sleep?.bedtime || "";
+    dom.sleepWake.value = day.sleep?.wakeTime || "";
+    dom.exerciseCalories.value = day.exercise ? String(day.exercise.calories) : "";
+    updateSleepDurationPreview();
+    dom.sleepHint.textContent = day.sleep
+      ? `已记录 ${day.sleep.bedtime} 入睡 · ${day.sleep.wakeTime} 起床。`
+      : "只用于你自己的记录，不会分享给厨房成员。";
+    dom.exerciseHint.textContent = day.exercise
+      ? `已记录 ${formatNumber(day.exercise.calories)} kcal，可随时修改。`
+      : "记录运动消耗，不改变食谱里的摄入热量。";
+  }
+
+  async function loadWellness({ force = false } = {}) {
+    if (!state.user) return;
+    const weekStart = ensureWellnessState();
+    if (!force && state.wellnessDays && state.wellnessWeekStart === weekStart) {
+      renderWellness();
+      return;
+    }
+    state.wellnessWeekStart = weekStart;
+    if (!getWeekDates(parseDateKey(weekStart)).some((date) => dateKey(date) === state.wellnessDate)) {
+      state.wellnessDate = dateKey(new Date());
+    }
+    state.wellnessLoading = true;
+    renderWellness();
+    try {
+      const data = await api(`/api/wellness?weekStart=${encodeURIComponent(weekStart)}`);
+      if (state.wellnessWeekStart !== weekStart) return;
+      state.wellnessDays = data.days || {};
+      state.wellnessLoading = false;
+      renderWellness();
+    } catch (error) {
+      state.wellnessLoading = false;
+      state.wellnessDays = state.wellnessDays || {};
+      renderWellness();
+      showToast(error.message);
+    }
+  }
+
+  async function saveWellnessSleep() {
+    if (!state.user) return;
+    const bedtime = dom.sleepBedtime.value;
+    const wakeTime = dom.sleepWake.value;
+    if (!bedtime || !wakeTime) {
+      showToast("请填写预计入睡和起床时间。");
+      return;
+    }
+    if (bedtime === wakeTime) {
+      showToast("入睡和起床时间不能相同。");
+      return;
+    }
+    dom.saveSleep.disabled = true;
+    const original = dom.saveSleep.innerHTML;
+    dom.saveSleep.textContent = "保存中…";
+    try {
+      const data = await api("/api/wellness/sleep", {
+        method: "PUT",
+        body: {
+          date: state.wellnessDate,
+          weekStart: state.wellnessWeekStart,
+          bedtime,
+          wakeTime,
+        },
+      });
+      state.wellnessDays = data.days || {};
+      renderWellness();
+      showToast("睡眠计划已保存。");
+    } catch (error) {
+      showToast(error.message);
+    } finally {
+      dom.saveSleep.disabled = false;
+      dom.saveSleep.innerHTML = original;
+    }
+  }
+
+  async function saveWellnessExercise() {
+    if (!state.user) return;
+    const raw = dom.exerciseCalories.value.trim();
+    const calories = Number(raw);
+    if (!raw || !Number.isFinite(calories) || calories < 0 || calories > 5000) {
+      showToast("请输入 0–5,000 kcal 之间的运动消耗。");
+      return;
+    }
+    dom.saveExercise.disabled = true;
+    const original = dom.saveExercise.innerHTML;
+    dom.saveExercise.textContent = "保存中…";
+    try {
+      const data = await api("/api/wellness/exercise", {
+        method: "PUT",
+        body: {
+          date: state.wellnessDate,
+          weekStart: state.wellnessWeekStart,
+          calories: Math.round(calories),
+        },
+      });
+      state.wellnessDays = data.days || {};
+      renderWellness();
+      showToast("运动消耗已保存。");
+    } catch (error) {
+      showToast(error.message);
+    } finally {
+      dom.saveExercise.disabled = false;
+      dom.saveExercise.innerHTML = original;
+    }
+  }
+
+  /* =========================================================
      Kitchen page
      ========================================================= */
 
@@ -1830,7 +2054,7 @@
 
   function setView(view, { updateHash = true } = {}) {
     if (!state.user) return;
-    if (!["planner", "ingredients", "kitchen"].includes(view)) view = "planner";
+    if (!["planner", "ingredients", "wellness", "kitchen"].includes(view)) view = "planner";
     if (!state.kitchen) view = "kitchen";
     if (view !== "ingredients" && state.ingredientBulkMode) {
       state.ingredientBulkMode = false;
@@ -1840,6 +2064,7 @@
 
     dom.plannerView.hidden = view !== "planner";
     dom.ingredientsView.hidden = view !== "ingredients";
+    dom.wellnessView.hidden = view !== "wellness";
     dom.kitchenView.hidden = view !== "kitchen";
     selectNav(view);
 
@@ -1847,6 +2072,9 @@
       renderPlanner();
     } else if (view === "ingredients") {
       renderIngredients();
+    } else if (view === "wellness") {
+      renderWellness();
+      loadWellness();
     } else if (view === "kitchen") {
       renderKitchen();
     }
@@ -1856,7 +2084,7 @@
     }
 
     if (state.kitchen) {
-      const names = { planner: "一周食谱", ingredients: "食材库", kitchen: "厨房" };
+      const names = { planner: "一周食谱", ingredients: "食材库", wellness: "健康", kitchen: "厨房" };
       document.title = `${names[view]} · ${state.kitchen.name} | 凑狗厨房`;
     }
 
@@ -3064,6 +3292,19 @@
     dom.plannerView = id("plannerView");
     dom.ingredientsView = id("ingredientsView");
     dom.kitchenView = id("kitchenView");
+    dom.wellnessView = id("wellnessView");
+    dom.wellnessRange = id("wellnessRange");
+    dom.wellnessDays = id("wellnessDays");
+    dom.sleepBedtime = id("sleepBedtime");
+    dom.sleepWake = id("sleepWake");
+    dom.sleepDuration = id("sleepDuration");
+    dom.saveSleep = id("saveSleep");
+    dom.sleepHint = id("sleepHint");
+    dom.exerciseCalories = id("exerciseCalories");
+    dom.exerciseQuick = id("exerciseQuick");
+    dom.saveExercise = id("saveExercise");
+    dom.exerciseHint = id("exerciseHint");
+    dom.wellnessSummary = id("wellnessSummary");
 
     dom.heroWeekNo = id("heroWeekNo");
     dom.heroRange = id("heroRange");
@@ -3334,6 +3575,29 @@
     dom.cancelIngredientBulk.addEventListener("click", exitIngredientBulkMode);
     dom.selectAllIngredients.addEventListener("click", toggleAllVisibleIngredients);
     dom.deleteSelectedIngredients.addEventListener("click", requestBulkDeleteIngredients);
+
+    dom.wellnessDays.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-wellness-day]");
+      if (!button) return;
+      state.wellnessDate = button.dataset.wellnessDay;
+      renderWellness();
+    });
+    dom.wellnessSummary.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-wellness-day]");
+      if (!button) return;
+      state.wellnessDate = button.dataset.wellnessDay;
+      renderWellness();
+    });
+    dom.sleepBedtime.addEventListener("input", updateSleepDurationPreview);
+    dom.sleepWake.addEventListener("input", updateSleepDurationPreview);
+    dom.saveSleep.addEventListener("click", saveWellnessSleep);
+    dom.saveExercise.addEventListener("click", saveWellnessExercise);
+    dom.exerciseQuick.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-exercise-quick]");
+      if (!button) return;
+      const current = Number(dom.exerciseCalories.value) || 0;
+      dom.exerciseCalories.value = String(Math.min(5000, current + Number(button.dataset.exerciseQuick)));
+    });
 
     dom.addIngredientButton.addEventListener("click", () => openIngredientModal());
     dom.emptyAddIngredient.addEventListener("click", () => openIngredientModal());
