@@ -5,7 +5,7 @@ pages_build_output_dir = "public"
 [[d1_databases]]
 binding = "DB"
 database_name = "cougou-kitchen"
-database_id = "REPLACE_WITH_D1_DATABASE_ID"
+database_id = "54d6a6de-d2ff-4cce-97b1-559c8a59d51b"
 
 [vars]
 ADMIN_USERNAME = "kyyd"

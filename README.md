@@ -84,15 +84,17 @@ HOST=0.0.0.0 PORT=4174 npm start
 
 ### 部署
 
-项目已经包含 `Dockerfile`、`railway.json`、本地 Git 仓库和详细的 [DEPLOY.md](DEPLOY.md)。当前选择部署到带持久卷的 **Northflank Sandbox 免费计划**。
+当前公网版本部署在 **Cloudflare Pages + D1**，免费且不依赖本机开机：
 
-部署时必须：
+- 网站：<https://cougou-kitchen.pages.dev>
+- 管理后台：<https://cougou-kitchen.pages.dev/admin>
+- 后端：`cloudflare/functions/api/[[path]].js`
+- 数据库：Cloudflare D1 `cougou-kitchen`
+- 数据库结构：`cloudflare/schema.sql`
 
-1. 设置 `HOST=0.0.0.0`（Docker 镜像已内置）；
-2. 给服务挂载持久卷到 `/app/data`；
-3. 设置 `ADMIN_USERNAME=你的用户名`，让首个管理员自动生效。
+Cloudflare 免费版不支持原来的 SSE 长连接，因此线上版本改为每 10 秒轮询同步；界面会显示「定时同步」。本地 Node 版本仍然使用 SSE 实时同步。
 
-Northflank 需要你准备一个账号和一个公开 Git 仓库；代码已初始化并提交到本地 `main` 分支，参考 [DEPLOY.md](DEPLOY.md) 推送后即可创建服务。
+维护和重新部署参考 [cloudflare/README.md](cloudflare/README.md)。项目仍保留 `Dockerfile`、`railway.json` 和 [DEPLOY.md](DEPLOY.md)，可以部署到支持持久卷的 Docker 平台。
 
 ### 管理员设置
 
@@ -145,6 +147,7 @@ ADMIN_USERNAME=用户名 npm start
 ├── admin.js                # 管理后台数据、操作与权限门禁
 ├── scripts/make-admin.js   # 管理员授权 CLI
 ├── package.json
+├── cloudflare/             # Cloudflare Pages + D1 线上版本
 ├── Dockerfile              # 容器部署
 ├── railway.json            # Railway 部署配置
 ├── DEPLOY.md               # Northflank / Railway 部署指南

@@ -9,7 +9,7 @@ const INGREDIENT_CATEGORIES = new Set(["staple", "protein", "vegetable", "fruit"
 const SESSION_COOKIE = "cougou_session";
 const SESSION_AGE = 60 * 60 * 24 * 30;
 const USERNAME_RE = /^[\p{L}\p{N}_-]{3,24}$/u;
-const PBKDF2_ITERATIONS = 120000;
+const PBKDF2_ITERATIONS = 100000;
 
 class HttpError extends Error {
   constructor(status, message) {
