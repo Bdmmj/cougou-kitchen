@@ -1384,6 +1384,42 @@ async function handleDeleteIngredient(req, res, user, kitchenId, ingredientId) {
   });
 }
 
+async function handleBatchDeleteIngredients(req, res, user, kitchenId) {
+  if (!user) throw new HttpError(401, "请先登录。");
+  const kitchen = requireMembership(kitchenId, user.id, { edit: true });
+  const body = await readJsonBody(req);
+  const ids = Array.isArray(body.ids)
+    ? [...new Set(body.ids.filter((id) => typeof id === "string" && /^[A-Za-z0-9_]+$/.test(id)))]
+    : [];
+  if (!ids.length) throw new HttpError(400, "请先选择要删除的食材。");
+  if (ids.length > 90) throw new HttpError(400, "一次最多删除 90 种食材。");
+
+  const placeholders = ids.map(() => "?").join(",");
+  const existing = db
+    .prepare(`SELECT id FROM ingredients WHERE kitchen_id = ? AND id IN (${placeholders})`)
+    .all(kitchenId, ...ids);
+  if (existing.length !== ids.length) {
+    throw new HttpError(404, "部分食材已经不存在，请刷新后再试。");
+  }
+
+  db.prepare(`DELETE FROM ingredients WHERE kitchen_id = ? AND id IN (${placeholders})`).run(
+    kitchenId,
+    ...ids,
+  );
+  const revision = touchKitchen(kitchenId);
+  broadcastKitchen(kitchenId, {
+    type: "ingredients",
+    actorId: user.id,
+    clientId: cleanText(req.headers["x-cougou-client-id"], 80) || null,
+    revision,
+  });
+  sendJson(res, 200, {
+    ingredients: getIngredientsForClient(kitchenId),
+    canEdit: kitchen.role !== "viewer",
+    deleted: ids.length,
+  });
+}
+
 async function handleGetPlan(req, res, user, kitchenId, url) {
   if (!user) throw new HttpError(401, "请先登录。");
   const plan = getPlan(kitchenId, user.id, url.searchParams.get("weekStart"));
@@ -1524,6 +1560,34 @@ async function handleClearWeek(req, res, user, kitchenId, url) {
   sendJson(res, 200, {
     plan: getPlan(kitchenId, user.id, weekStart),
     canEdit: kitchen.role !== "viewer",
+  });
+}
+
+async function handleClearDay(req, res, user, kitchenId, url) {
+  if (!user) throw new HttpError(401, "请先登录。");
+  const kitchen = requireMembership(kitchenId, user.id, { edit: true });
+  const date = String(url.searchParams.get("date") || "");
+  const weekStart = normalizeWeekStart(url.searchParams.get("weekStart"));
+  const dates = weekDateKeys(weekStart);
+  if (!parseDateKey(date) || !dates.includes(date)) {
+    throw new HttpError(400, "日期不在当前周内。");
+  }
+
+  const result = db
+    .prepare("DELETE FROM plan_items WHERE kitchen_id = ? AND date = ?")
+    .run(kitchenId, date);
+  const revision = touchKitchen(kitchenId, { clearSample: true });
+  broadcastKitchen(kitchenId, {
+    type: "plan",
+    weekStart,
+    actorId: user.id,
+    clientId: cleanText(req.headers["x-cougou-client-id"], 80) || null,
+    revision,
+  });
+  sendJson(res, 200, {
+    plan: getPlan(kitchenId, user.id, weekStart),
+    canEdit: kitchen.role !== "viewer",
+    deleted: result.changes,
   });
 }
 
@@ -1922,6 +1986,11 @@ async function handleApi(req, res, url) {
     if (method === "DELETE") return handleClearWeek(req, res, user, kitchenId, url);
   }
 
+  match = pathname.match(/^\/api\/kitchens\/([A-Za-z0-9_]+)\/plan\/day$/);
+  if (match && method === "DELETE") {
+    return handleClearDay(req, res, user, match[1], url);
+  }
+
   match = pathname.match(/^\/api\/kitchens\/([A-Za-z0-9_]+)\/plan\/items$/);
   if (match && method === "POST") {
     return handleCreatePlanItem(req, res, user, match[1]);
@@ -1940,6 +2009,11 @@ async function handleApi(req, res, url) {
     const kitchenId = match[1];
     if (method === "GET") return handleGetIngredients(req, res, user, kitchenId);
     if (method === "POST") return handleCreateIngredient(req, res, user, kitchenId);
+  }
+
+  match = pathname.match(/^\/api\/kitchens\/([A-Za-z0-9_]+)\/ingredients\/batch-delete$/);
+  if (match && method === "POST") {
+    return handleBatchDeleteIngredients(req, res, user, match[1]);
   }
 
   match = pathname.match(/^\/api\/kitchens\/([A-Za-z0-9_]+)\/ingredients\/([A-Za-z0-9_]+)$/);

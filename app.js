@@ -71,6 +71,10 @@
     activeDayIndex: 0,
     renderedWeekStart: null,
     pendingPlannerJump: false,
+    ingredientBulkMode: false,
+    selectedIngredients: new Set(),
+    clearMode: "week",
+    clearDate: null,
   };
 
   const dom = {};
@@ -1357,7 +1361,14 @@
           >
             <span class="progress-fill" style="width:${progress}%"></span>
           </div>
-          <p class="day-status">${status}</p>
+          <div class="day-foot-line">
+            <p class="day-status">${status}</p>
+            ${
+              editable && itemCount
+                ? `<button class="day-clear-button" type="button" data-clear-day="${key}">清空本日</button>`
+                : ""
+            }
+          </div>
         </footer>
       </article>
     `;
@@ -1437,13 +1448,24 @@
   function renderIngredients() {
     if (!state.kitchen) return;
     const canModify = canEdit();
+    if (!canModify && state.ingredientBulkMode) {
+      state.ingredientBulkMode = false;
+      state.selectedIngredients.clear();
+    }
+    const bulk = state.ingredientBulkMode && canModify;
+    const knownIngredientIds = new Set(state.ingredients.map((item) => item.id));
+    for (const selectedId of state.selectedIngredients) {
+      if (!knownIngredientIds.has(selectedId)) state.selectedIngredients.delete(selectedId);
+    }
     dom.ingredientCount.textContent = `${state.ingredients.length} 种食材`;
     dom.ingredientWeekLabel.textContent = formatRange(
       getWeekDates(state.weekStart)[0],
       getWeekDates(state.weekStart)[6],
     );
-    dom.addIngredientButton.hidden = !canModify;
-    dom.emptyAddIngredient.hidden = !canModify;
+    dom.addIngredientButton.hidden = !canModify || bulk;
+    dom.bulkIngredientButton.hidden = !canModify || state.ingredients.length === 0 || bulk;
+    dom.bulkIngredientButton.classList.toggle("is-active", bulk);
+    dom.emptyAddIngredient.hidden = !canModify || bulk;
 
     const counts = { all: state.ingredients.length };
     Object.keys(CATEGORY_META).forEach((key) => {
@@ -1477,15 +1499,27 @@
         return left.name.localeCompare(right.name, "zh-Hans-CN");
       });
 
+    const visibleIds = filtered.map((item) => item.id);
+    const allVisibleSelected =
+      visibleIds.length > 0 && visibleIds.every((id) => state.selectedIngredients.has(id));
+
     dom.ingredientGrid.innerHTML = filtered
       .map((item) => {
         const meta = CATEGORY_META[item.category] || CATEGORY_META.other;
+        const selected = state.selectedIngredients.has(item.id);
         return `
-          <article class="ingredient-card" data-category="${item.category}">
+          <article class="ingredient-card${bulk ? " is-bulk-selectable" : ""}${selected ? " is-selected" : ""}" data-category="${item.category}" data-ingredient-card="${escapeHtml(item.id)}">
+            ${
+              bulk
+                ? `<button class="ingredient-select-check" type="button" data-select-ingredient="${escapeHtml(item.id)}" aria-label="${selected ? "取消选择" : "选择"}${escapeHtml(item.name)}" aria-pressed="${selected}">
+                     <svg class="icon" aria-hidden="true"><use href="#icon-check"></use></svg>
+                   </button>`
+                : ""
+            }
             <div class="ingredient-card-head">
               <span class="ingredient-category">${escapeHtml(meta.label)}</span>
               ${
-                canModify
+                canModify && !bulk
                   ? `<button class="ingredient-edit" type="button" data-edit-ingredient="${escapeHtml(item.id)}" aria-label="编辑${escapeHtml(item.name)}">
                        <svg class="icon" aria-hidden="true"><use href="#icon-pencil"></use></svg>
                      </button>`
@@ -1500,18 +1534,27 @@
                 <span>kcal</span>
               </div>
               ${
-                canModify
-                  ? `<button class="ingredient-add" type="button" data-quick-add="${escapeHtml(item.id)}">
-                       <svg class="icon" aria-hidden="true"><use href="#icon-plus"></use></svg>
-                       加入食谱
-                     </button>`
-                  : '<span class="ingredient-readonly">仅观看</span>'
+                bulk
+                  ? '<span class="ingredient-bulk-hint">点击卡片选择</span>'
+                  : canModify
+                    ? `<button class="ingredient-add" type="button" data-quick-add="${escapeHtml(item.id)}">
+                         <svg class="icon" aria-hidden="true"><use href="#icon-plus"></use></svg>
+                         加入食谱
+                       </button>`
+                    : '<span class="ingredient-readonly">仅观看</span>'
               }
             </div>
           </article>
         `;
       })
       .join("");
+
+    dom.ingredientBulkBar.hidden = !bulk;
+    if (bulk) {
+      dom.selectedIngredientCount.textContent = `已选 ${state.selectedIngredients.size} 项`;
+      dom.selectAllIngredients.textContent = allVisibleSelected ? "取消全选" : "全选当前";
+      dom.deleteSelectedIngredients.disabled = state.selectedIngredients.size === 0;
+    }
 
     const isEmpty = filtered.length === 0;
     dom.ingredientEmpty.hidden = !isEmpty;
@@ -1528,6 +1571,89 @@
     } else {
       dom.emptyAddIngredient.hidden = true;
     }
+  }
+
+  function updateIngredientBulkControls() {
+    if (!state.ingredientBulkMode) return;
+    const cards = [...dom.ingredientGrid.querySelectorAll("[data-ingredient-card]")];
+    const visibleIds = cards.map((card) => card.dataset.ingredientCard);
+    const allSelected =
+      visibleIds.length > 0 && visibleIds.every((id) => state.selectedIngredients.has(id));
+    dom.selectedIngredientCount.textContent = `已选 ${state.selectedIngredients.size} 项`;
+    dom.selectAllIngredients.textContent = allSelected ? "取消全选" : "全选当前";
+    dom.deleteSelectedIngredients.disabled = state.selectedIngredients.size === 0;
+  }
+
+  function toggleIngredientBulkSelection(id) {
+    if (!state.ingredientBulkMode) return;
+    if (state.selectedIngredients.has(id)) state.selectedIngredients.delete(id);
+    else state.selectedIngredients.add(id);
+    const card = dom.ingredientGrid.querySelector(`[data-ingredient-card="${id}"]`);
+    if (card) {
+      const selected = state.selectedIngredients.has(id);
+      card.classList.toggle("is-selected", selected);
+      const check = card.querySelector("[data-select-ingredient]");
+      if (check) check.setAttribute("aria-pressed", String(selected));
+    }
+    updateIngredientBulkControls();
+  }
+
+  function toggleAllVisibleIngredients() {
+    if (!state.ingredientBulkMode) return;
+    const cards = [...dom.ingredientGrid.querySelectorAll("[data-ingredient-card]")];
+    const visibleIds = cards.map((card) => card.dataset.ingredientCard);
+    const allSelected =
+      visibleIds.length > 0 && visibleIds.every((id) => state.selectedIngredients.has(id));
+    visibleIds.forEach((id) => {
+      if (allSelected) state.selectedIngredients.delete(id);
+      else state.selectedIngredients.add(id);
+    });
+    cards.forEach((card) => {
+      const selected = state.selectedIngredients.has(card.dataset.ingredientCard);
+      card.classList.toggle("is-selected", selected);
+      const check = card.querySelector("[data-select-ingredient]");
+      if (check) check.setAttribute("aria-pressed", String(selected));
+    });
+    updateIngredientBulkControls();
+  }
+
+  function enterIngredientBulkMode() {
+    if (!canEdit() || !state.ingredients.length) return;
+    state.ingredientBulkMode = true;
+    state.selectedIngredients.clear();
+    renderIngredients();
+    requestAnimationFrame(() => dom.ingredientBulkBar.scrollIntoView({ block: "nearest" }));
+  }
+
+  function exitIngredientBulkMode() {
+    state.ingredientBulkMode = false;
+    state.selectedIngredients.clear();
+    renderIngredients();
+  }
+
+  function requestBulkDeleteIngredients() {
+    if (!canEdit()) return;
+    const ids = [...state.selectedIngredients];
+    if (!ids.length) {
+      showToast("先选择要删除的食材吧。");
+      return;
+    }
+    askConfirm({
+      title: `删除选中的 ${ids.length} 种食材？`,
+      copy: "这些食材会从当前厨房的食材库中移除。已经加入食谱的食物不会被改动。",
+      confirmLabel: `删除 ${ids.length} 项`,
+      action: async () => {
+        const data = await api(
+          `/api/kitchens/${encodeURIComponent(state.kitchen.id)}/ingredients/batch-delete`,
+          { method: "POST", body: { ids } },
+        );
+        state.ingredients = data.ingredients;
+        state.ingredientBulkMode = false;
+        state.selectedIngredients.clear();
+        renderIngredients();
+        showToast(`已删除 ${data.deleted || ids.length} 种食材。`);
+      },
+    });
   }
 
   /* =========================================================
@@ -1703,6 +1829,10 @@
     if (!state.user) return;
     if (!["planner", "ingredients", "kitchen"].includes(view)) view = "planner";
     if (!state.kitchen) view = "kitchen";
+    if (view !== "ingredients" && state.ingredientBulkMode) {
+      state.ingredientBulkMode = false;
+      state.selectedIngredients.clear();
+    }
     state.view = view;
 
     dom.plannerView.hidden = view !== "planner";
@@ -1862,6 +1992,10 @@
   }
 
   function askConfirm({ title, copy, confirmLabel = "确认", action }) {
+    clearTimeout(toastTimer);
+    clearTimeout(toastHideTimer);
+    dom.toast.classList.remove("is-visible");
+    dom.toast.hidden = true;
     state.confirmAction = action;
     dom.confirmTitle.textContent = title;
     dom.confirmCopy.textContent = copy;
@@ -2244,6 +2378,28 @@
     } catch (error) {
       showToast(error.message);
     }
+  }
+
+  function requestClearDay(date) {
+    if (!canEdit() || !state.kitchen) return;
+    const count = getDayItemCount(date);
+    if (!count) {
+      showToast("这一天还没有安排食物。");
+      return;
+    }
+    askConfirm({
+      title: `清空${formatDayLong(date)}的食谱？`,
+      copy: `${formatDayLong(date)}有 ${count} 道食物。清空后，这一天的热量记录也会一起移除，其他日期不受影响。`,
+      confirmLabel: "清空本日",
+      action: async () => {
+        const data = await api(
+          `/api/kitchens/${encodeURIComponent(state.kitchen.id)}/plan/day?date=${encodeURIComponent(date)}&weekStart=${encodeURIComponent(dateKey(state.weekStart))}`,
+          { method: "DELETE" },
+        );
+        applyPlanResponse(data.plan);
+        showToast(`${formatDayLong(date)}的食谱已清空。`);
+      },
+    });
   }
 
   function dismissSample() {
@@ -2835,6 +2991,12 @@
 
     dom.ingredientCount = id("ingredientCount");
     dom.addIngredientButton = id("addIngredientButton");
+    dom.bulkIngredientButton = id("bulkIngredientButton");
+    dom.ingredientBulkBar = id("ingredientBulkBar");
+    dom.selectedIngredientCount = id("selectedIngredientCount");
+    dom.selectAllIngredients = id("selectAllIngredients");
+    dom.deleteSelectedIngredients = id("deleteSelectedIngredients");
+    dom.cancelIngredientBulk = id("cancelIngredientBulk");
     dom.categoryTabs = id("categoryTabs");
     dom.ingredientSearch = id("ingredientSearch");
     dom.ingredientWeekLabel = id("ingredientWeekLabel");
@@ -2893,6 +3055,8 @@
     dom.targetError = id("targetError");
 
     dom.clearModal = id("clearModal");
+    dom.clearModalKicker = id("clearModalKicker");
+    dom.clearModalTitle = id("clearModalTitle");
     dom.clearModalCopy = id("clearModalCopy");
     dom.confirmClear = id("confirmClear");
 
@@ -2997,6 +3161,11 @@
 
     dom.weekBoard.addEventListener("click", (event) => {
       if (!canEdit()) return;
+      const clearDayButton = event.target.closest("[data-clear-day]");
+      if (clearDayButton) {
+        requestClearDay(clearDayButton.dataset.clearDay);
+        return;
+      }
       const addButton = event.target.closest(".meal-add, .empty-meal");
       if (addButton) {
         openFoodModal(addButton.dataset.date, addButton.dataset.meal);
@@ -3044,6 +3213,14 @@
       }, 120);
     });
 
+    dom.bulkIngredientButton.addEventListener("click", () => {
+      if (state.ingredientBulkMode) exitIngredientBulkMode();
+      else enterIngredientBulkMode();
+    });
+    dom.cancelIngredientBulk.addEventListener("click", exitIngredientBulkMode);
+    dom.selectAllIngredients.addEventListener("click", toggleAllVisibleIngredients);
+    dom.deleteSelectedIngredients.addEventListener("click", requestBulkDeleteIngredients);
+
     dom.addIngredientButton.addEventListener("click", () => openIngredientModal());
     dom.emptyAddIngredient.addEventListener("click", () => openIngredientModal());
     dom.ingredientSearch.addEventListener("input", () => {
@@ -3057,6 +3234,11 @@
       renderIngredients();
     });
     dom.ingredientGrid.addEventListener("click", (event) => {
+      if (state.ingredientBulkMode) {
+        const card = event.target.closest("[data-ingredient-card]");
+        if (card) toggleIngredientBulkSelection(card.dataset.ingredientCard);
+        return;
+      }
       const editButton = event.target.closest("[data-edit-ingredient]");
       if (editButton) {
         openIngredientModal(editButton.dataset.editIngredient);

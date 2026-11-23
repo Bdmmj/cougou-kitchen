@@ -996,6 +996,41 @@ async function handleDeleteIngredient(env, user, kitchenId, ingredientId) {
    Plan handlers
    ========================================================= */
 
+async function handleBatchDeleteIngredients(request, env, user, kitchenId) {
+  if (!user) throw new HttpError(401, "请先登录。");
+  const kitchen = await requireMembership(env, kitchenId, user.id, { edit: true });
+  const body = await readJson(request);
+  const ids = Array.isArray(body.ids)
+    ? [...new Set(body.ids.filter((id) => typeof id === "string" && /^[A-Za-z0-9_]+$/.test(id)))]
+    : [];
+  if (!ids.length) throw new HttpError(400, "请先选择要删除的食材。");
+  if (ids.length > 90) throw new HttpError(400, "一次最多删除 90 种食材。");
+
+  const placeholders = ids.map(() => "?").join(",");
+  const existing = await all(
+    env,
+    `SELECT id FROM ingredients WHERE kitchen_id = ? AND id IN (${placeholders})`,
+    kitchenId,
+    ...ids,
+  );
+  if (existing.length !== ids.length) {
+    throw new HttpError(404, "部分食材已经不存在，请刷新后再试。");
+  }
+
+  await run(
+    env,
+    `DELETE FROM ingredients WHERE kitchen_id = ? AND id IN (${placeholders})`,
+    kitchenId,
+    ...ids,
+  );
+  await touchKitchen(env, kitchenId);
+  return json({
+    ingredients: await getIngredientsForClient(env, kitchenId),
+    canEdit: kitchen.role !== "viewer",
+    deleted: ids.length,
+  });
+}
+
 async function handleGetPlan(env, user, kitchenId, url) {
   if (!user) throw new HttpError(401, "请先登录。");
   return json(await getPlan(env, kitchenId, user.id, url.searchParams.get("weekStart")));
@@ -1091,6 +1126,25 @@ async function handleClearWeek(env, user, kitchenId, url) {
   return json({
     plan: await getPlan(env, kitchenId, user.id, weekStart),
     canEdit: kitchen.role !== "viewer",
+  });
+}
+
+async function handleClearDay(env, user, kitchenId, url) {
+  if (!user) throw new HttpError(401, "请先登录。");
+  const kitchen = await requireMembership(env, kitchenId, user.id, { edit: true });
+  const date = String(url.searchParams.get("date") || "");
+  const weekStart = normalizeWeekStart(url.searchParams.get("weekStart"));
+  const dates = weekDateKeys(weekStart);
+  if (!parseDateKey(date) || !dates.includes(date)) {
+    throw new HttpError(400, "日期不在当前周内。");
+  }
+
+  const result = await run(env, "DELETE FROM plan_items WHERE kitchen_id = ? AND date = ?", kitchenId, date);
+  await touchKitchen(env, kitchenId, { clearSample: true });
+  return json({
+    plan: await getPlan(env, kitchenId, user.id, weekStart),
+    canEdit: kitchen.role !== "viewer",
+    deleted: Number(result.meta?.changes || 0),
   });
 }
 
@@ -1419,6 +1473,11 @@ async function handleRequest(request, env) {
     if (method === "DELETE") return handleClearWeek(env, user, match[1], url);
   }
 
+  match = pathname.match(/^\/api\/kitchens\/([A-Za-z0-9_]+)\/plan\/day$/);
+  if (match && method === "DELETE") {
+    return handleClearDay(env, user, match[1], url);
+  }
+
   match = pathname.match(/^\/api\/kitchens\/([A-Za-z0-9_]+)\/plan\/items$/);
   if (match && method === "POST") {
     return handleCreatePlanItem(request, env, user, match[1]);
@@ -1434,6 +1493,11 @@ async function handleRequest(request, env) {
   if (match) {
     if (method === "GET") return handleGetIngredients(env, user, match[1]);
     if (method === "POST") return handleCreateIngredient(request, env, user, match[1]);
+  }
+
+  match = pathname.match(/^\/api\/kitchens\/([A-Za-z0-9_]+)\/ingredients\/batch-delete$/);
+  if (match && method === "POST") {
+    return handleBatchDeleteIngredients(request, env, user, match[1]);
   }
 
   match = pathname.match(/^\/api\/kitchens\/([A-Za-z0-9_]+)\/ingredients\/([A-Za-z0-9_]+)$/);

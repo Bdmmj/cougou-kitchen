@@ -395,6 +395,10 @@ npm start</code></pre>
           </div>
           <div class="view-head-actions">
             <span class="count-chip" id="ingredientCount">0 种食材</span>
+            <button class="button button-quiet" id="bulkIngredientButton" type="button">
+              <svg class="icon" aria-hidden="true"><use href="#icon-trash"></use></svg>
+              批量删除
+            </button>
             <button class="button button-primary" id="addIngredientButton" type="button">
               <svg class="icon" aria-hidden="true"><use href="#icon-plus"></use></svg>
               新建食材
@@ -413,6 +417,18 @@ npm start</code></pre>
         <div class="ingredient-week-note">
           <span>正在为 <strong id="ingredientWeekLabel">11月23日 — 29日</strong> 备菜</span>
           <span id="ingredientRoleNote">食材库由厨房成员共享</span>
+        </div>
+
+        <div class="ingredient-bulk-bar" id="ingredientBulkBar" hidden>
+          <div class="ingredient-bulk-copy">
+            <strong id="selectedIngredientCount">已选 0 项</strong>
+            <span>点食材卡片可选择多项</span>
+          </div>
+          <div class="ingredient-bulk-actions">
+            <button class="text-button" id="selectAllIngredients" type="button">全选当前</button>
+            <button class="button button-danger" id="deleteSelectedIngredients" type="button">删除所选</button>
+            <button class="text-button" id="cancelIngredientBulk" type="button">取消</button>
+          </div>
         </div>
 
         <div class="ingredient-grid" id="ingredientGrid"></div>
@@ -768,7 +784,7 @@ npm start</code></pre>
     <section class="modal modal-small" role="alertdialog" aria-modal="true" aria-labelledby="clearModalTitle" aria-describedby="clearModalCopy" tabindex="-1">
       <div class="modal-head">
         <div>
-          <p class="modal-kicker">RESET WEEK</p>
+          <p class="modal-kicker" id="clearModalKicker">RESET WEEK</p>
           <h2 id="clearModalTitle">清空本周食谱？</h2>
         </div>
         <button class="modal-close" type="button" data-close-clear aria-label="关闭">
