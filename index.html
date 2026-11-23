@@ -626,12 +626,31 @@ npm start</code></pre>
       <form id="foodForm" novalidate>
         <div class="form-group" id="presetField">
           <div class="field-label-row">
-            <label for="presetSelect">从食材库快速填入</label>
+            <span id="presetFieldLabel">从食材库快速填入</span>
             <button class="inline-link" id="manageIngredientsFromModal" type="button">管理食材库</button>
           </div>
-          <select class="select-input" id="presetSelect">
-            <option value="">选择一种预设食材…</option>
-          </select>
+          <button class="preset-trigger" id="presetPickerButton" type="button" aria-expanded="false" aria-controls="presetPanel" aria-labelledby="presetFieldLabel presetTriggerLabel">
+            <span class="preset-trigger-mark" aria-hidden="true">
+              <svg class="icon"><use href="#icon-pantry"></use></svg>
+            </span>
+            <span class="preset-trigger-copy">
+              <strong id="presetTriggerLabel">选择一种预设食材…</strong>
+              <small id="presetTriggerMeta">按分类浏览，点一下自动填入</small>
+            </span>
+            <svg class="icon preset-trigger-chevron" aria-hidden="true"><use href="#icon-chevron-down"></use></svg>
+          </button>
+          <div class="preset-panel" id="presetPanel" hidden>
+            <div class="preset-panel-top">
+              <label class="preset-search">
+                <svg class="icon" aria-hidden="true"><use href="#icon-search"></use></svg>
+                <input id="presetSearch" type="search" placeholder="搜索食材…" autocomplete="off" aria-label="搜索预设食材">
+              </label>
+              <button class="text-button" id="closePresetPanel" type="button">收起</button>
+            </div>
+            <div class="preset-chips" id="presetCategoryChips" role="group" aria-label="按分类筛选预设"></div>
+            <div class="preset-list" id="presetList"></div>
+            <div class="preset-empty" id="presetEmpty" hidden>没有找到匹配的食材。</div>
+          </div>
           <p class="field-hint" id="presetHint">选好预设后，名称和热量会自动填上。</p>
         </div>
 

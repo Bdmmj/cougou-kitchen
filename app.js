@@ -75,6 +75,9 @@
     selectedIngredients: new Set(),
     clearMode: "week",
     clearDate: null,
+    presetQuery: "",
+    presetCategory: "all",
+    presetPanelOpen: false,
   };
 
   const dom = {};
@@ -2009,35 +2012,126 @@
      Food modal
      ========================================================= */
 
-  function populatePresetSelect(selectedId = "") {
-    const groups = {};
-    state.ingredients.forEach((ingredient) => {
-      const category = ingredient.category || "other";
-      if (!groups[category]) groups[category] = [];
-      groups[category].push(ingredient);
-    });
-
-    dom.presetSelect.innerHTML =
-      '<option value="">选择一种预设食材…</option>' +
-      Object.entries(CATEGORY_META)
-        .filter(([key]) => groups[key]?.length)
-        .map(
-          ([key, meta]) =>
-            `<optgroup label="${meta.label}">${groups[key]
-              .map(
-                (ingredient) =>
-                  `<option value="${escapeHtml(ingredient.id)}">${escapeHtml(ingredient.name)} · ${formatNumber(ingredient.calories)} kcal / ${escapeHtml(ingredient.unit)}</option>`,
-              )
-              .join("")}</optgroup>`,
-        )
-        .join("");
-
-    dom.presetSelect.value = selectedId;
+  function populatePresetSelect() {
     const noIngredients = state.ingredients.length === 0;
-    dom.presetSelect.disabled = noIngredients;
+    state.presetQuery = "";
+    state.presetCategory = "all";
+    state.presetPanelOpen = false;
+    dom.presetPickerButton.disabled = noIngredients;
+    dom.presetPickerButton.classList.remove("has-value");
+    dom.presetPickerButton.setAttribute("aria-expanded", "false");
+    dom.presetTriggerLabel.textContent = noIngredients
+      ? "食材库暂时没有预设"
+      : "选择一种预设食材…";
+    dom.presetTriggerMeta.textContent = noIngredients
+      ? "先去食材库添加吧"
+      : "按分类浏览，点一下自动填入";
+    dom.presetPanel.hidden = true;
+    dom.presetSearch.value = "";
     dom.presetHint.textContent = noIngredients
       ? "食材库还没有预设，先去添加，下次就能一键填入。"
       : "选好预设后，名称和热量会自动填上。";
+  }
+
+  function renderPresetPanel() {
+    const query = state.presetQuery.trim().toLowerCase();
+    const counts = {};
+    state.ingredients.forEach((item) => {
+      counts[item.category] = (counts[item.category] || 0) + 1;
+    });
+    const categories = Object.entries(CATEGORY_META).filter(([key]) => counts[key]);
+    dom.presetCategoryChips.innerHTML = [
+      `<button class="preset-chip${state.presetCategory === "all" ? " is-active" : ""}" type="button" data-preset-category="all">全部 <span>${state.ingredients.length}</span></button>`,
+      ...categories.map(
+        ([key, meta]) =>
+          `<button class="preset-chip${state.presetCategory === key ? " is-active" : ""}" type="button" data-preset-category="${key}">${meta.label} <span>${counts[key]}</span></button>`,
+      ),
+    ].join("");
+
+    const filtered = state.ingredients
+      .filter((item) => {
+        const categoryMatch =
+          state.presetCategory === "all" || item.category === state.presetCategory;
+        const queryMatch =
+          !query ||
+          item.name.toLowerCase().includes(query) ||
+          item.unit.toLowerCase().includes(query);
+        return categoryMatch && queryMatch;
+      })
+      .sort((left, right) => {
+        const order = Object.keys(CATEGORY_META);
+        const diff = order.indexOf(left.category) - order.indexOf(right.category);
+        return diff !== 0 ? diff : left.name.localeCompare(right.name, "zh-Hans-CN");
+      });
+
+    if (!filtered.length) {
+      dom.presetList.innerHTML = "";
+      dom.presetEmpty.hidden = false;
+      return;
+    }
+    dom.presetEmpty.hidden = true;
+
+    const optionHtml = (item) => {
+      const meta = CATEGORY_META[item.category] || CATEGORY_META.other;
+      return `
+        <button class="preset-option" type="button" data-preset-id="${escapeHtml(item.id)}">
+          <span class="preset-option-main">
+            <strong>${escapeHtml(item.name)}</strong>
+            <small>${escapeHtml(meta.label)} · ${formatNumber(item.calories)} kcal · 每 ${escapeHtml(item.unit || "1 份")}</small>
+          </span>
+          <span class="preset-option-add" aria-hidden="true"><svg class="icon"><use href="#icon-plus"></use></svg></span>
+        </button>
+      `;
+    };
+
+    if (state.presetCategory === "all" && !query) {
+      dom.presetList.innerHTML = categories
+        .map(([key, meta]) => {
+          const items = filtered.filter((item) => item.category === key);
+          return items.length
+            ? `<p class="preset-group-title">${meta.label}</p>${items.map(optionHtml).join("")}`
+            : "";
+        })
+        .join("");
+    } else {
+      dom.presetList.innerHTML = filtered.map(optionHtml).join("");
+    }
+  }
+
+  function openPresetPanel() {
+    if (dom.presetPickerButton.disabled) return;
+    state.presetPanelOpen = true;
+    dom.presetPanel.hidden = false;
+    dom.presetPickerButton.setAttribute("aria-expanded", "true");
+    renderPresetPanel();
+    if (!window.matchMedia("(max-width: 880px)").matches) {
+      requestAnimationFrame(() => dom.presetSearch.focus({ preventScroll: true }));
+    }
+  }
+
+  function closePresetPanel({ focus = false } = {}) {
+    state.presetPanelOpen = false;
+    dom.presetPanel.hidden = true;
+    dom.presetPickerButton.setAttribute("aria-expanded", "false");
+    if (focus) dom.presetPickerButton.focus({ preventScroll: true });
+  }
+
+  function togglePresetPanel() {
+    if (state.presetPanelOpen) closePresetPanel({ focus: true });
+    else openPresetPanel();
+  }
+
+  function applyPresetIngredient(ingredient) {
+    if (!ingredient) return;
+    const meta = CATEGORY_META[ingredient.category] || CATEGORY_META.other;
+    dom.foodName.value = ingredient.name;
+    dom.foodKcal.value = String(ingredient.calories);
+    dom.presetTriggerLabel.textContent = ingredient.name;
+    dom.presetTriggerMeta.textContent = `${meta.label} · ${formatNumber(ingredient.calories)} kcal · 每 ${ingredient.unit || "1 份"}`;
+    dom.presetPickerButton.classList.add("has-value");
+    clearFormError(dom.foodName, dom.foodError);
+    closePresetPanel();
+    dom.foodName.focus({ preventScroll: true });
   }
 
   function updateFoodKicker() {
@@ -3040,7 +3134,15 @@
     dom.foodModalKicker = id("foodModalKicker");
     dom.foodModalTitle = id("foodModalTitle");
     dom.presetField = id("presetField");
-    dom.presetSelect = id("presetSelect");
+    dom.presetPickerButton = id("presetPickerButton");
+    dom.presetTriggerLabel = id("presetTriggerLabel");
+    dom.presetTriggerMeta = id("presetTriggerMeta");
+    dom.presetPanel = id("presetPanel");
+    dom.presetSearch = id("presetSearch");
+    dom.presetCategoryChips = id("presetCategoryChips");
+    dom.presetList = id("presetList");
+    dom.presetEmpty = id("presetEmpty");
+    dom.closePresetPanel = id("closePresetPanel");
     dom.presetHint = id("presetHint");
     dom.manageIngredientsFromModal = id("manageIngredientsFromModal");
     dom.foodName = id("foodName");
@@ -3297,13 +3399,27 @@
     dom.foodForm.addEventListener("change", (event) => {
       if (event.target.name === "meal") updateFoodKicker();
     });
-    dom.presetSelect.addEventListener("change", () => {
-      const ingredient = state.ingredients.find((item) => item.id === dom.presetSelect.value);
-      if (!ingredient) return;
-      dom.foodName.value = ingredient.name;
-      dom.foodKcal.value = String(ingredient.calories);
-      clearFormError(dom.foodName, dom.foodError);
-      dom.foodName.focus({ preventScroll: true });
+    dom.presetPickerButton.addEventListener("click", togglePresetPanel);
+    dom.closePresetPanel.addEventListener("click", () => closePresetPanel({ focus: true }));
+    dom.presetSearch.addEventListener("input", () => {
+      state.presetQuery = dom.presetSearch.value;
+      renderPresetPanel();
+    });
+    dom.presetSearch.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter") return;
+      event.preventDefault();
+      dom.presetList.querySelector(".preset-option")?.click();
+    });
+    dom.presetCategoryChips.addEventListener("click", (event) => {
+      const chip = event.target.closest("[data-preset-category]");
+      if (!chip) return;
+      state.presetCategory = chip.dataset.presetCategory;
+      renderPresetPanel();
+    });
+    dom.presetList.addEventListener("click", (event) => {
+      const option = event.target.closest("[data-preset-id]");
+      if (!option) return;
+      applyPresetIngredient(state.ingredients.find((item) => item.id === option.dataset.presetId));
     });
     dom.manageIngredientsFromModal.addEventListener("click", () => {
       closeModal();
