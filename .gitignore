@@ -9,3 +9,4 @@ logs/
 .northflank-token
 .env
 .env.*
+.deploy/
