@@ -1,0 +1,11 @@
+name = "cougou-kitchen"
+compatibility_date = "2026-11-23"
+pages_build_output_dir = "public"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "cougou-kitchen"
+database_id = "REPLACE_WITH_D1_DATABASE_ID"
+
+[vars]
+ADMIN_USERNAME = "kyyd"

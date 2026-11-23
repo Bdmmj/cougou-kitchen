@@ -65,6 +65,9 @@
     confirmAction: null,
     quickIngredient: null,
     remoteToastAt: 0,
+    realtime: true,
+    pollTimer: null,
+    pollTick: 0,
   };
 
   const dom = {};
@@ -805,8 +808,14 @@
 
   function connectStream(kitchenId) {
     disconnectStream();
+    if (state.realtime === false) {
+      startPolling();
+      setSyncStatus(true);
+      return;
+    }
     if (!("EventSource" in window)) {
-      setSyncStatus(false);
+      startPolling();
+      setSyncStatus(true);
       return;
     }
 
@@ -840,13 +849,45 @@
       state.stream.close();
       state.stream = null;
     }
+    stopPolling();
     setSyncStatus(false);
+  }
+
+  function startPolling() {
+    stopPolling();
+    state.pollTick = 0;
+    state.pollTimer = setInterval(async () => {
+      if (document.hidden || !state.user || !state.kitchen) return;
+      state.pollTick += 1;
+      try {
+        if (state.view === "planner") {
+          await refreshPlan({ silent: true });
+        } else if (state.view === "ingredients") {
+          await refreshIngredients({ silent: true });
+        } else if (state.view === "kitchen") {
+          await refreshKitchenDetail();
+        }
+        if (state.pollTick % 4 === 0) {
+          await refreshMe();
+        }
+      } catch (error) {
+        // Polling is best-effort; the next tick retries.
+      }
+    }, 10000);
+  }
+
+  function stopPolling() {
+    if (state.pollTimer) {
+      clearInterval(state.pollTimer);
+      state.pollTimer = null;
+    }
   }
 
   function setSyncStatus(online) {
     if (!dom.syncStatus) return;
-    dom.syncStatus.classList.toggle("is-offline", !online);
-    dom.syncStatus.innerHTML = `<i></i>${online ? "实时共享" : "正在重连"}`;
+    const polling = state.realtime === false;
+    dom.syncStatus.classList.toggle("is-offline", !polling && !online);
+    dom.syncStatus.innerHTML = `<i></i>${polling ? "定时同步" : online ? "实时共享" : "正在重连"}`;
   }
 
   function handleRemoteEvent(event) {
@@ -2560,6 +2601,13 @@
     const inviteCode = getInviteCodeFromLocation();
     if (inviteCode) {
       await loadInvitePreview(inviteCode);
+    }
+
+    try {
+      const runtime = await api("/api/runtime", { allowUnauthorized: true });
+      state.realtime = runtime.realtime !== false;
+    } catch (error) {
+      state.realtime = false;
     }
 
     let me = null;

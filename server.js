@@ -1853,6 +1853,11 @@ async function handleApi(req, res, url) {
     return;
   }
 
+  if (pathname === "/api/runtime" && method === "GET") {
+    sendJson(res, 200, { realtime: true, platform: "node" });
+    return;
+  }
+
   if (pathname === "/api/auth/register" && method === "POST") {
     await handleAuthRegister(req, res);
     return;
