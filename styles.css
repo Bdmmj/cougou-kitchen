@@ -5408,6 +5408,78 @@ p {
   }
 }
 
+/* ---------- Mobile app polish ---------- */
+
+@media (max-width: 760px) {
+  /* iOS zooms the page when a focused form control is below 16px. */
+  .text-input,
+  .select-input,
+  .number-wrap input,
+  .search-box input,
+  .auth-field input,
+  .admin-field input,
+  .admin-search input,
+  textarea,
+  select {
+    font-size: 16px;
+  }
+
+  .meal-add {
+    width: 30px;
+    height: 30px;
+  }
+
+  .meal-add .icon {
+    width: 12px;
+    height: 12px;
+  }
+
+  .auth-panel,
+  .admin-gate-panel {
+    min-height: 100dvh;
+  }
+
+  .modal {
+    max-height: 91dvh;
+  }
+}
+
+@media (max-width: 600px) {
+  /* The editorial hero is beautiful on desktop, but on a phone it pushes
+     the actual planner more than a screen down. Keep the brand line and
+     the week context, drop the oversized headline and intro copy. */
+  .hero {
+    gap: 16px;
+    padding: 17px 0 19px;
+  }
+
+  .hero h1,
+  .hero-lede,
+  .hero-watermark {
+    display: none;
+  }
+
+  .hero-copy {
+    padding-bottom: 0;
+  }
+
+  .hero-meta {
+    margin-top: 12px;
+  }
+
+  .summary-card {
+    border-radius: 20px;
+  }
+}
+
+@media (max-width: 430px) {
+  .user-avatar {
+    width: 40px;
+    height: 40px;
+    font-size: 15px;
+  }
+}
+
 /* ---------- Print additions ---------- */
 
 @media print {

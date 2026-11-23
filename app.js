@@ -1664,6 +1664,9 @@
       const names = { planner: "一周食谱", ingredients: "食材库", kitchen: "厨房" };
       document.title = `${names[view]} · ${state.kitchen.name} | 凑狗厨房`;
     }
+
+    // Switching app sections should always start at the top, especially on mobile.
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
   }
 
   function navigate(view) {

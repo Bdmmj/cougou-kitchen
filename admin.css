@@ -1401,3 +1401,31 @@
     animation-duration: 0.01ms !important;
   }
 }
+
+/* ---------- Mobile admin polish ---------- */
+
+@media (max-width: 820px) {
+  .admin-gate-panel {
+    min-height: 100dvh;
+  }
+
+  .admin-field input,
+  .admin-search input,
+  .admin-detail select,
+  .admin-detail input {
+    font-size: 16px;
+  }
+
+  .admin-nav-item {
+    min-height: 38px;
+  }
+
+  .admin-logout {
+    padding: 9px;
+  }
+
+  .admin-logout .icon {
+    width: 16px;
+    height: 16px;
+  }
+}
