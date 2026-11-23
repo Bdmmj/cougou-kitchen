@@ -475,12 +475,33 @@ async function getActiveInvites(env, kitchenId) {
   }));
 }
 
+async function getMessages(env, kitchenId, limit = 50) {
+  const rows = await all(
+    env,
+    `SELECT m.id, m.content, m.created_at, m.user_id,
+            u.display_name AS author_name
+     FROM messages m JOIN users u ON u.id = m.user_id
+     WHERE m.kitchen_id = ?
+     ORDER BY m.created_at DESC
+     LIMIT ?`,
+    kitchenId,
+    limit,
+  );
+  return rows.map((row) => ({
+    id: row.id,
+    content: row.content,
+    authorId: row.user_id,
+    authorName: row.author_name,
+    createdAt: row.created_at,
+  }));
+}
+
 async function getKitchenDetail(env, kitchenId, userId) {
   const kitchen = await getKitchenSummary(env, kitchenId, userId);
   if (!kitchen) return null;
   const members = await getMembers(env, kitchenId);
   const invites = kitchen.role === "owner" ? await getActiveInvites(env, kitchenId) : [];
-  return { kitchen, members, invites };
+  return { kitchen, members, invites, messages: await getMessages(env, kitchenId) };
 }
 
 async function requireMembership(env, kitchenId, userId, { edit = false, owner = false } = {}) {
@@ -1149,6 +1170,62 @@ async function handleClearDay(env, user, kitchenId, url) {
 }
 
 /* =========================================================
+   Kitchen message board
+   ========================================================= */
+
+function cleanMessageContent(value) {
+  if (typeof value !== "string") return "";
+  return value
+    .replace(/\r\n?/g, "\n")
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "")
+    .trim();
+}
+
+async function handleGetMessages(env, user, kitchenId) {
+  if (!user) throw new HttpError(401, "请先登录。");
+  await requireMembership(env, kitchenId, user.id);
+  return json({ messages: await getMessages(env, kitchenId) });
+}
+
+async function handleCreateMessage(request, env, user, kitchenId) {
+  if (!user) throw new HttpError(401, "请先登录。");
+  await requireMembership(env, kitchenId, user.id);
+  const body = await readJson(request);
+  const content = cleanMessageContent(body.content);
+  if (!content) throw new HttpError(400, "写点内容再张贴吧。");
+  if (content.length > 500) throw new HttpError(400, "留言最多 500 个字。");
+
+  const id = newId("msg");
+  await run(
+    env,
+    "INSERT INTO messages (id, kitchen_id, user_id, content, created_at) VALUES (?, ?, ?, ?, ?)",
+    id,
+    kitchenId,
+    user.id,
+    content,
+    nowISO(),
+  );
+  return json({ messages: await getMessages(env, kitchenId) }, 201);
+}
+
+async function handleDeleteMessage(env, user, kitchenId, messageId) {
+  if (!user) throw new HttpError(401, "请先登录。");
+  const kitchen = await requireMembership(env, kitchenId, user.id);
+  const message = await one(
+    env,
+    "SELECT id, user_id FROM messages WHERE id = ? AND kitchen_id = ?",
+    messageId,
+    kitchenId,
+  );
+  if (!message) throw new HttpError(404, "这条留言已经不存在了。");
+  if (message.user_id !== user.id && kitchen.role !== "owner") {
+    throw new HttpError(403, "只有留言作者或厨房主人可以删除这条留言。");
+  }
+  await run(env, "DELETE FROM messages WHERE id = ?", messageId);
+  return json({ messages: await getMessages(env, kitchenId) });
+}
+
+/* =========================================================
    Personal wellness: sleep plan + exercise burn
    ========================================================= */
 
@@ -1449,6 +1526,7 @@ async function deleteKitchenData(env, kitchenId) {
     env.DB.prepare("DELETE FROM plan_items WHERE kitchen_id = ?").bind(kitchenId),
     env.DB.prepare("DELETE FROM ingredients WHERE kitchen_id = ?").bind(kitchenId),
     env.DB.prepare("DELETE FROM invites WHERE kitchen_id = ?").bind(kitchenId),
+    env.DB.prepare("DELETE FROM messages WHERE kitchen_id = ?").bind(kitchenId),
     env.DB.prepare("DELETE FROM memberships WHERE kitchen_id = ?").bind(kitchenId),
     env.DB.prepare("DELETE FROM kitchens WHERE id = ?").bind(kitchenId),
   ]);
@@ -1504,6 +1582,7 @@ async function handleAdminApi(request, env, url, user) {
       env.DB.prepare("DELETE FROM invites WHERE created_by = ?").bind(target.id),
       env.DB.prepare("DELETE FROM memberships WHERE user_id = ?").bind(target.id),
       env.DB.prepare("DELETE FROM sessions WHERE user_id = ?").bind(target.id),
+      env.DB.prepare("DELETE FROM messages WHERE user_id = ?").bind(target.id),
       env.DB.prepare("DELETE FROM sleep_logs WHERE user_id = ?").bind(target.id),
       env.DB.prepare("DELETE FROM exercise_logs WHERE user_id = ?").bind(target.id),
       env.DB.prepare("DELETE FROM users WHERE id = ?").bind(target.id),
@@ -1644,6 +1723,17 @@ async function handleRequest(request, env) {
   if (match) {
     if (method === "PATCH") return handleUpdateIngredient(request, env, user, match[1], match[2]);
     if (method === "DELETE") return handleDeleteIngredient(env, user, match[1], match[2]);
+  }
+
+  match = pathname.match(/^\/api\/kitchens\/([A-Za-z0-9_]+)\/messages$/);
+  if (match) {
+    if (method === "GET") return handleGetMessages(env, user, match[1]);
+    if (method === "POST") return handleCreateMessage(request, env, user, match[1]);
+  }
+
+  match = pathname.match(/^\/api\/kitchens\/([A-Za-z0-9_]+)\/messages\/([A-Za-z0-9_]+)$/);
+  if (match && method === "DELETE") {
+    return handleDeleteMessage(env, user, match[1], match[2]);
   }
 
   match = pathname.match(/^\/api\/kitchens\/([A-Za-z0-9_]+)\/invites$/);

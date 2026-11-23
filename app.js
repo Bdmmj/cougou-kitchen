@@ -82,6 +82,7 @@
     wellnessDate: null,
     wellnessDays: null,
     wellnessLoading: false,
+    messages: [],
   };
 
   const dom = {};
@@ -187,6 +188,16 @@
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) return "—";
     return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日`;
+  }
+
+  function formatMessageTime(value) {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "";
+    const sameYear = date.getFullYear() === new Date().getFullYear();
+    const time = `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+    return sameYear
+      ? `${date.getMonth() + 1}月${date.getDate()}日 ${time}`
+      : `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日 ${time}`;
   }
 
   function formatExpiry(value) {
@@ -575,6 +586,7 @@
     state.wellnessDate = null;
     state.wellnessDays = null;
     state.wellnessLoading = false;
+    state.messages = [];
     dom.bootScreen.hidden = true;
     dom.appView.hidden = true;
     dom.authView.hidden = false;
@@ -734,6 +746,7 @@
       state.kitchen = detail.kitchen;
       state.members = detail.members;
       state.invites = detail.invites || [];
+      state.messages = detail.messages || [];
       state.plan = plan;
       state.ingredients = ingredientsData.ingredients || [];
       state.generatedInviteLink = null;
@@ -811,6 +824,7 @@
       state.kitchen = detail.kitchen;
       state.members = detail.members;
       state.invites = detail.invites || [];
+      state.messages = detail.messages || [];
       if (render) {
         renderChrome();
         renderKitchen();
@@ -930,7 +944,7 @@
       scheduleRemoteSync("ingredients");
       return;
     }
-    if (data.type === "members" || data.type === "kitchen") {
+    if (data.type === "members" || data.type === "kitchen" || data.type === "messages") {
       scheduleRemoteSync("kitchen");
     }
   }
@@ -1953,7 +1967,97 @@
 
     renderActiveInvites(owner);
     renderMemberList(owner);
+    renderMessages();
     renderKitchenList();
+  }
+
+  function renderMessages() {
+    if (!state.kitchen) return;
+    const messages = state.messages || [];
+    dom.messageCountLabel.textContent = `${messages.length} 条留言`;
+    if (!messages.length) {
+      dom.messageList.innerHTML =
+        '<p class="message-empty">还没有留言，给厨房里的朋友说句话吧。</p>';
+      return;
+    }
+    dom.messageList.innerHTML = messages
+      .map((message) => {
+        const canDelete =
+          state.kitchen.role === "owner" || message.authorId === state.user?.id;
+        return `
+          <div class="message-item" data-message-id="${escapeHtml(message.id)}">
+            <span class="message-avatar" aria-hidden="true">${escapeHtml(firstCharacter(message.authorName))}</span>
+            <div class="message-main">
+              <div class="message-head">
+                <strong class="message-author">${escapeHtml(message.authorName)}</strong>
+                <time class="message-time" datetime="${escapeHtml(message.createdAt)}">${escapeHtml(formatMessageTime(message.createdAt))}</time>
+              </div>
+              <p class="message-content">${escapeHtml(message.content)}</p>
+            </div>
+            ${
+              canDelete
+                ? `<button class="message-delete" type="button" data-delete-message="${escapeHtml(message.id)}" aria-label="删除${escapeHtml(message.authorName)}的留言">
+                     <svg class="icon" aria-hidden="true"><use href="#icon-trash"></use></svg>
+                   </button>`
+                : ""
+            }
+          </div>
+        `;
+      })
+      .join("");
+  }
+
+  function updateMessageLength() {
+    dom.messageLength.textContent = `${dom.messageInput.value.length} / 500`;
+  }
+
+  async function postMessage(event) {
+    event.preventDefault();
+    if (!state.kitchen || !state.user) return;
+    const content = dom.messageInput.value.trim();
+    if (!content) {
+      showToast("写点内容再张贴吧。");
+      return;
+    }
+    if (content.length > 500) {
+      showToast("留言最多 500 个字。");
+      return;
+    }
+    dom.messageSubmit.disabled = true;
+    const original = dom.messageSubmit.innerHTML;
+    dom.messageSubmit.textContent = "张贴中…";
+    try {
+      const data = await api(
+        `/api/kitchens/${encodeURIComponent(state.kitchen.id)}/messages`,
+        { method: "POST", body: { content } },
+      );
+      state.messages = data.messages || [];
+      dom.messageInput.value = "";
+      updateMessageLength();
+      renderMessages();
+      dom.messageList.scrollTop = 0;
+      showToast("留言已张贴。");
+    } catch (error) {
+      showToast(error.message);
+    } finally {
+      dom.messageSubmit.disabled = false;
+      dom.messageSubmit.innerHTML = original;
+    }
+  }
+
+  async function deleteMessage(messageId) {
+    if (!state.kitchen) return;
+    try {
+      const data = await api(
+        `/api/kitchens/${encodeURIComponent(state.kitchen.id)}/messages/${encodeURIComponent(messageId)}`,
+        { method: "DELETE" },
+      );
+      state.messages = data.messages || [];
+      renderMessages();
+      showToast("留言已删除。");
+    } catch (error) {
+      showToast(error.message);
+    }
   }
 
   function renderActiveInvites(owner) {
@@ -3377,6 +3481,12 @@
     dom.memberCountLabel = id("memberCountLabel");
     dom.memberList = id("memberList");
     dom.kitchenListCount = id("kitchenListCount");
+    dom.messageForm = id("messageForm");
+    dom.messageInput = id("messageInput");
+    dom.messageLength = id("messageLength");
+    dom.messageSubmit = id("messageSubmit");
+    dom.messageCountLabel = id("messageCountLabel");
+    dom.messageList = id("messageList");
     dom.kitchenList = id("kitchenList");
     dom.createKitchenButton = id("createKitchenButton");
     dom.joinKitchenButton = id("joinKitchenButton");
@@ -3626,6 +3736,19 @@
       if (quickButton) {
         openQuickAdd(quickButton.dataset.quickAdd);
       }
+    });
+
+    dom.messageForm.addEventListener("submit", postMessage);
+    dom.messageInput.addEventListener("input", updateMessageLength);
+    dom.messageList.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-delete-message]");
+      if (!button) return;
+      askConfirm({
+        title: "删除这条留言？",
+        copy: "删除后，厨房里的其他成员也将看不到这条留言。",
+        confirmLabel: "删除留言",
+        action: () => deleteMessage(button.dataset.deleteMessage),
+      });
     });
 
     dom.createKitchenButton.addEventListener("click", openCreateKitchen);

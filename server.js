@@ -122,6 +122,17 @@ db.exec(`
 
   CREATE INDEX IF NOT EXISTS idx_invites_kitchen ON invites (kitchen_id, revoked, expires_at);
 
+  CREATE TABLE IF NOT EXISTS messages (
+    id TEXT PRIMARY KEY,
+    kitchen_id TEXT NOT NULL REFERENCES kitchens(id) ON DELETE CASCADE,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    content TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_messages_kitchen_created
+    ON messages (kitchen_id, created_at DESC);
+
   CREATE TABLE IF NOT EXISTS sleep_logs (
     user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     date TEXT NOT NULL,
@@ -515,12 +526,32 @@ function getActiveInvites(kitchenId) {
     }));
 }
 
+function getMessages(kitchenId, limit = 50) {
+  return db
+    .prepare(
+      `SELECT m.id, m.content, m.created_at, m.user_id,
+              u.display_name AS author_name
+       FROM messages m JOIN users u ON u.id = m.user_id
+       WHERE m.kitchen_id = ?
+       ORDER BY m.created_at DESC
+       LIMIT ?`,
+    )
+    .all(kitchenId, limit)
+    .map((row) => ({
+      id: row.id,
+      content: row.content,
+      authorId: row.user_id,
+      authorName: row.author_name,
+      createdAt: row.created_at,
+    }));
+}
+
 function getKitchenDetail(kitchenId, userId) {
   const kitchen = getKitchenSummary(kitchenId, userId);
   if (!kitchen) return null;
   const members = getMembers(kitchenId);
   const invites = kitchen.role === "owner" ? getActiveInvites(kitchenId) : [];
-  return { kitchen, members, invites };
+  return { kitchen, members, invites, messages: getMessages(kitchenId) };
 }
 
 function requireMembership(kitchenId, userId, { edit = false, owner = false } = {}) {
@@ -1611,6 +1642,66 @@ async function handleClearDay(req, res, user, kitchenId, url) {
 }
 
 /* =========================================================
+   Kitchen message board
+   ========================================================= */
+
+function cleanMessageContent(value) {
+  if (typeof value !== "string") return "";
+  return value
+    .replace(/\r\n?/g, "\n")
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "")
+    .trim();
+}
+
+async function handleGetMessages(req, res, user, kitchenId) {
+  if (!user) throw new HttpError(401, "请先登录。");
+  requireMembership(kitchenId, user.id);
+  sendJson(res, 200, { messages: getMessages(kitchenId) });
+}
+
+async function handleCreateMessage(req, res, user, kitchenId) {
+  if (!user) throw new HttpError(401, "请先登录。");
+  requireMembership(kitchenId, user.id);
+  const body = await readJsonBody(req);
+  const content = cleanMessageContent(body.content);
+  if (!content) throw new HttpError(400, "写点内容再张贴吧。");
+  if (content.length > 500) throw new HttpError(400, "留言最多 500 个字。");
+
+  const id = newId("msg");
+  const createdAt = nowISO();
+  db.prepare(
+    "INSERT INTO messages (id, kitchen_id, user_id, content, created_at) VALUES (?, ?, ?, ?, ?)",
+  ).run(id, kitchenId, user.id, content, createdAt);
+  broadcastKitchen(kitchenId, {
+    type: "messages",
+    actorId: user.id,
+    clientId: cleanText(req.headers["x-cougou-client-id"], 80) || null,
+    messageId: id,
+  });
+  sendJson(res, 201, { messages: getMessages(kitchenId) });
+}
+
+async function handleDeleteMessage(req, res, user, kitchenId, messageId) {
+  if (!user) throw new HttpError(401, "请先登录。");
+  const kitchen = requireMembership(kitchenId, user.id);
+  const message = db
+    .prepare("SELECT id, user_id FROM messages WHERE id = ? AND kitchen_id = ?")
+    .get(messageId, kitchenId);
+  if (!message) throw new HttpError(404, "这条留言已经不存在了。");
+  if (message.user_id !== user.id && kitchen.role !== "owner") {
+    throw new HttpError(403, "只有留言作者或厨房主人可以删除这条留言。");
+  }
+  db.prepare("DELETE FROM messages WHERE id = ?").run(messageId);
+  broadcastKitchen(kitchenId, {
+    type: "messages",
+    actorId: user.id,
+    clientId: cleanText(req.headers["x-cougou-client-id"], 80) || null,
+    messageId,
+  });
+  sendJson(res, 200, { messages: getMessages(kitchenId) });
+}
+
+/* =========================================================
    Personal wellness: sleep plan + exercise burn
    ========================================================= */
 
@@ -2166,6 +2257,17 @@ async function handleApi(req, res, url) {
     if (method === "DELETE") {
       return handleDeleteIngredient(req, res, user, kitchenId, ingredientId);
     }
+  }
+
+  match = pathname.match(/^\/api\/kitchens\/([A-Za-z0-9_]+)\/messages$/);
+  if (match) {
+    if (method === "GET") return handleGetMessages(req, res, user, match[1]);
+    if (method === "POST") return handleCreateMessage(req, res, user, match[1]);
+  }
+
+  match = pathname.match(/^\/api\/kitchens\/([A-Za-z0-9_]+)\/messages\/([A-Za-z0-9_]+)$/);
+  if (match && method === "DELETE") {
+    return handleDeleteMessage(req, res, user, match[1], match[2]);
   }
 
   match = pathname.match(/^\/api\/kitchens\/([A-Za-z0-9_]+)\/invites$/);

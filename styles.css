@@ -8040,3 +8040,247 @@ body {
     font-size: 9px;
   }
 }
+
+/* ---------- Kitchen message board ---------- */
+
+.visually-hidden {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
+.message-board-card {
+  margin-top: 14px;
+  padding: 21px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--card);
+  box-shadow: var(--shadow-card);
+}
+
+.message-board-copy {
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.65;
+}
+
+.message-form {
+  margin-top: 15px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #fbf6ec;
+}
+
+.message-form textarea {
+  display: block;
+  width: 100%;
+  min-height: 82px;
+  padding: 9px 10px;
+  border: 0;
+  border-radius: 9px;
+  background: var(--card);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.6;
+  resize: vertical;
+}
+
+.message-form textarea:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(216, 100, 70, 0.11);
+}
+
+.message-form-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.message-length {
+  color: var(--faint);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.message-submit {
+  height: 38px;
+  padding-inline: 13px;
+  font-size: 11.5px;
+}
+
+.message-submit .icon {
+  width: 13px;
+  height: 13px;
+}
+
+.message-list {
+  max-height: 480px;
+  margin-top: 13px;
+  overflow-y: auto;
+  border-top: 1px solid var(--line);
+  overscroll-behavior: contain;
+}
+
+.message-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 13px 2px;
+  border-bottom: 1px solid var(--line);
+}
+
+.message-item:last-child {
+  border-bottom: 0;
+}
+
+.message-avatar {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: var(--sage-soft);
+  color: var(--sage-deep);
+  font-family: var(--serif);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.message-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.message-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.message-author {
+  overflow: hidden;
+  color: var(--ink-soft);
+  font-size: 11.5px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.message-time {
+  flex: 0 0 auto;
+  color: var(--faint);
+  font-size: 9.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.message-content {
+  margin-top: 5px;
+  color: var(--ink-soft);
+  font-size: 13px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.message-delete {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--faint);
+  cursor: pointer;
+}
+
+.message-delete:hover {
+  border-color: #eed4ca;
+  background: #f9e7df;
+  color: var(--tomato-deep);
+}
+
+.message-delete .icon {
+  width: 12px;
+  height: 12px;
+}
+
+.message-empty {
+  padding: 24px 8px;
+  color: var(--muted);
+  font-size: 11px;
+  text-align: center;
+}
+
+@media (max-width: 760px) {
+  .message-board-card {
+    margin-top: 10px;
+    padding: 16px;
+    border-radius: 16px;
+  }
+
+  .message-form {
+    margin-top: 12px;
+    padding: 8px;
+  }
+
+  .message-form textarea {
+    min-height: 78px;
+    font-size: 16px;
+  }
+
+  .message-submit {
+    height: 42px;
+    font-size: 12px;
+  }
+
+  .message-length {
+    font-size: 10.5px;
+  }
+
+  .message-list {
+    max-height: 400px;
+  }
+
+  .message-item {
+    padding: 12px 1px;
+  }
+
+  .message-avatar {
+    width: 32px;
+    height: 32px;
+    font-size: 13px;
+  }
+
+  .message-author {
+    font-size: 12px;
+  }
+
+  .message-time {
+    font-size: 10px;
+  }
+
+  .message-content {
+    font-size: 14px;
+  }
+
+  .message-delete {
+    width: 32px;
+    height: 32px;
+  }
+}

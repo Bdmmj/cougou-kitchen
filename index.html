@@ -664,6 +664,29 @@ npm start</code></pre>
           </aside>
         </div>
 
+        <section class="message-board-card">
+          <div class="card-heading">
+            <div>
+              <p class="card-kicker">KITCHEN NOTES</p>
+              <h2>留言板</h2>
+            </div>
+            <span class="member-hint" id="messageCountLabel">0 条留言</span>
+          </div>
+          <p class="message-board-copy">厨房里的每个人都可以在这里留话，分享今天的安排，或只是说一句晚安。</p>
+          <form class="message-form" id="messageForm">
+            <label class="visually-hidden" for="messageInput">留言内容</label>
+            <textarea id="messageInput" maxlength="500" placeholder="给厨房里的朋友留个话…" aria-describedby="messageLength"></textarea>
+            <div class="message-form-foot">
+              <span class="message-length" id="messageLength">0 / 500</span>
+              <button class="button button-primary message-submit" id="messageSubmit" type="submit">
+                <svg class="icon" aria-hidden="true"><use href="#icon-arrow-right"></use></svg>
+                张贴留言
+              </button>
+            </div>
+          </form>
+          <div class="message-list" id="messageList"></div>
+        </section>
+
         <section class="my-kitchens-section">
           <div class="card-heading">
             <div>

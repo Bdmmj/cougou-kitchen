@@ -74,6 +74,15 @@ CREATE TABLE IF NOT EXISTS invites (
 );
 CREATE INDEX IF NOT EXISTS idx_invites_kitchen ON invites (kitchen_id, revoked, expires_at);
 
+CREATE TABLE IF NOT EXISTS messages (
+  id TEXT PRIMARY KEY,
+  kitchen_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  content TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_messages_kitchen_created ON messages (kitchen_id, created_at DESC);
+
 CREATE TABLE IF NOT EXISTS sleep_logs (
   user_id TEXT NOT NULL,
   date TEXT NOT NULL,
