@@ -6363,3 +6363,628 @@ p {
     width: calc(100% - 28px);
   }
 }
+
+/* ---------- Readability pass: larger text across the app ---------- */
+
+body {
+  font-size: 15px;
+}
+
+.brand-en {
+  font-size: 8px;
+}
+
+.nav-item {
+  font-size: 11.5px;
+}
+
+.pill-button {
+  font-size: 11.5px;
+}
+
+.pill-button strong {
+  font-size: 12.5px;
+}
+
+.kitchen-switch-text strong {
+  font-size: 11.5px;
+}
+
+.kitchen-switch-text small {
+  font-size: 9px;
+}
+
+.mobile-tab {
+  font-size: 9.5px;
+}
+
+.footer-inner {
+  font-size: 9px;
+}
+
+.toast {
+  font-size: 11.5px;
+}
+
+.role-badge {
+  font-size: 9.5px;
+}
+
+.eyebrow {
+  font-size: 9.5px;
+}
+
+.hero-lede {
+  font-size: 14.5px;
+}
+
+.hero-meta {
+  font-size: 11px;
+}
+
+.summary-label {
+  font-size: 11px;
+}
+
+.summary-target {
+  font-size: 10.5px;
+}
+
+.summary-total span {
+  font-size: 11px;
+}
+
+.summary-compare {
+  font-size: 11.5px;
+}
+
+.chart-day {
+  font-size: 9.5px;
+}
+
+.chart-target-line::after {
+  font-size: 8.5px;
+}
+
+.summary-stat span {
+  font-size: 10px;
+}
+
+.summary-stat strong {
+  font-size: 17px;
+}
+
+.summary-stat strong span {
+  font-size: 9.5px;
+}
+
+.section-kicker {
+  font-size: 9.5px;
+}
+
+.planner-sub {
+  font-size: 12px;
+}
+
+.week-range {
+  font-size: 12.5px;
+}
+
+.week-sub {
+  font-size: 9.5px;
+}
+
+.today-button {
+  font-size: 11px;
+}
+
+.mobile-hint {
+  font-size: 10.5px;
+}
+
+.day-pager-button span {
+  font-size: 10.5px;
+}
+
+.day-pager-button em {
+  font-size: 15.5px;
+}
+
+.day-weekday {
+  font-size: 21px;
+}
+
+.day-date {
+  font-size: 11px;
+}
+
+.today-pill,
+.day-index {
+  font-size: 9.5px;
+}
+
+.meal-badge {
+  width: 21px;
+  height: 21px;
+  font-size: 10.5px;
+}
+
+.meal-name {
+  font-size: 12.5px;
+}
+
+.meal-total {
+  font-size: 10px;
+}
+
+.meal-add {
+  width: 26px;
+  height: 26px;
+}
+
+.meal-add .icon {
+  width: 12px;
+  height: 12px;
+}
+
+.food-item {
+  font-size: 13px;
+}
+
+.food-kcal {
+  font-size: 11px;
+}
+
+.empty-meal {
+  font-size: 10.5px;
+}
+
+.day-total-label {
+  font-size: 10px;
+}
+
+.day-total {
+  font-size: 19px;
+}
+
+.day-total span {
+  font-size: 9.5px;
+}
+
+.day-status {
+  font-size: 10.5px;
+}
+
+.view-lede {
+  font-size: 13px;
+}
+
+.count-chip {
+  font-size: 10.5px;
+}
+
+.category-tab {
+  font-size: 10.5px;
+}
+
+.category-tab span {
+  font-size: 9px;
+}
+
+.ingredient-week-note {
+  font-size: 10.5px;
+}
+
+.ingredient-week-note strong {
+  font-size: 11.5px;
+}
+
+.ingredient-category {
+  font-size: 9.5px;
+}
+
+.ingredient-name {
+  font-size: 20px;
+}
+
+.ingredient-unit {
+  font-size: 10px;
+}
+
+.ingredient-calories strong {
+  font-size: 23px;
+}
+
+.ingredient-calories span {
+  font-size: 9px;
+}
+
+.ingredient-add {
+  font-size: 10.5px;
+}
+
+.library-note {
+  font-size: 10.5px;
+}
+
+.kitchen-title-copy > p {
+  font-size: 11px;
+}
+
+.text-icon-button {
+  font-size: 10.5px;
+}
+
+.kitchen-meta-row span {
+  font-size: 9.5px;
+}
+
+.kitchen-meta-row strong {
+  font-size: 12px;
+}
+
+.card-kicker {
+  font-size: 9.5px;
+}
+
+.invite-copy {
+  font-size: 11px;
+}
+
+.invite-role strong {
+  font-size: 11.5px;
+}
+
+.invite-role small {
+  font-size: 9.5px;
+}
+
+.card-heading h2 span {
+  font-size: 11px;
+}
+
+.member-hint {
+  font-size: 9.5px;
+}
+
+.member-copy strong {
+  font-size: 11.5px;
+}
+
+.member-copy span {
+  font-size: 9.5px;
+}
+
+.member-role-select {
+  height: 30px;
+  font-size: 10.5px;
+}
+
+.role-guide-row strong {
+  font-size: 11px;
+}
+
+.role-guide-row p {
+  font-size: 10px;
+}
+
+.kitchen-card-copy strong {
+  font-size: 13px;
+}
+
+.kitchen-card-copy span {
+  font-size: 10px;
+}
+
+.kitchen-card-foot,
+.kitchen-card-enter {
+  font-size: 10px;
+}
+
+.kitchen-card-role {
+  font-size: 9.5px;
+}
+
+.field-label-row label {
+  font-size: 11.5px;
+}
+
+.field-label-row span {
+  font-size: 9.5px;
+}
+
+.quick-add-summary p {
+  font-size: 10px;
+}
+
+.button {
+  font-size: 12px;
+}
+
+.text-button,
+.delete-button {
+  font-size: 11px;
+}
+
+.auth-sub {
+  font-size: 12.5px;
+}
+
+.auth-field > span:first-child {
+  font-size: 11.5px;
+}
+
+.auth-tab {
+  font-size: 12.5px;
+}
+
+.auth-note {
+  font-size: 10px;
+}
+
+.auth-copyright {
+  font-size: 9px;
+}
+
+.auth-panel-top {
+  font-size: 8.5px;
+}
+
+.auth-kicker {
+  font-size: 9.5px;
+}
+
+.auth-error {
+  font-size: 10.5px;
+}
+
+.auth-mobile-quote {
+  font-size: 13px;
+}
+
+/* Desktop form control text: mobile keeps its 16px anti-zoom size above. */
+@media (min-width: 881px) {
+  .text-input,
+  .select-input,
+  .number-wrap input,
+  .search-box input,
+  .auth-field input {
+    font-size: 15px;
+  }
+
+  .auth-field input {
+    height: 48px;
+  }
+
+  .button {
+    height: 42px;
+  }
+}
+
+@media (max-width: 880px) {
+  .day-weekday {
+    font-size: 23px;
+  }
+
+  .day-date {
+    font-size: 11.5px;
+  }
+
+  .food-item {
+    font-size: 13.5px;
+    padding-block: 6px;
+  }
+
+  .food-kcal {
+    font-size: 11.5px;
+  }
+
+  .meal-name {
+    font-size: 13px;
+  }
+
+  .meal-total {
+    font-size: 10.5px;
+  }
+
+  .meal-badge {
+    width: 22px;
+    height: 22px;
+    font-size: 11px;
+  }
+
+  .meal-add {
+    width: 32px;
+    height: 32px;
+  }
+
+  .meal-add .icon {
+    width: 13px;
+    height: 13px;
+  }
+
+  .day-total {
+    font-size: 21px;
+  }
+
+  .day-total-label {
+    font-size: 10.5px;
+  }
+
+  .day-status {
+    font-size: 11px;
+  }
+
+  .day-pager-button span {
+    font-size: 11px;
+  }
+
+  .day-pager-button em {
+    font-size: 16px;
+  }
+
+  .auth-panel h2 {
+    font-size: 32px;
+  }
+
+  .auth-sub {
+    font-size: 12.5px;
+  }
+
+  .auth-tab {
+    font-size: 13px;
+  }
+
+  .auth-note {
+    font-size: 10.5px;
+  }
+
+  .auth-copyright {
+    font-size: 9.5px;
+  }
+}
+
+/* ---------- Final readability tuning ---------- */
+
+.food-item {
+  font-size: 13.5px;
+  line-height: 1.45;
+}
+
+.food-kcal {
+  font-size: 11.5px;
+}
+
+.meal-name {
+  font-size: 13px;
+}
+
+.meal-total {
+  font-size: 10.5px;
+}
+
+.day-weekday {
+  font-size: 22px;
+}
+
+.day-date {
+  font-size: 11.5px;
+}
+
+.day-total {
+  font-size: 20px;
+}
+
+.day-total-label {
+  font-size: 10.5px;
+}
+
+.day-status {
+  font-size: 11px;
+}
+
+.section-kicker {
+  font-size: 10px;
+}
+
+.summary-label {
+  font-size: 11.5px;
+}
+
+.chart-day {
+  font-size: 10px;
+}
+
+.ingredient-calories span {
+  font-size: 10px;
+}
+
+.mobile-tab {
+  font-size: 10px;
+}
+
+.auth-field > span:first-child {
+  font-size: 12px;
+}
+
+.auth-tab {
+  font-size: 13.5px;
+}
+
+.auth-sub {
+  font-size: 13px;
+}
+
+.auth-note {
+  font-size: 11px;
+}
+
+.auth-submit {
+  font-size: 13.5px;
+}
+
+.auth-copyright {
+  font-size: 9.5px;
+}
+
+.demo-banner {
+  font-size: 10.5px;
+}
+
+.demo-action {
+  font-size: 10px;
+}
+
+.planner-foot p {
+  font-size: 10.5px;
+}
+
+.planner-foot .text-button {
+  font-size: 11px;
+}
+
+.day-pager-button.is-active span {
+  font-size: 10.5px;
+}
+
+@media (max-width: 880px) {
+  .food-item {
+    font-size: 14.5px;
+  }
+
+  .food-kcal {
+    font-size: 12px;
+  }
+
+  .meal-name {
+    font-size: 13.5px;
+  }
+
+  .meal-total {
+    font-size: 11px;
+  }
+
+  .day-weekday {
+    font-size: 24px;
+  }
+
+  .day-date {
+    font-size: 12px;
+  }
+
+  .day-total {
+    font-size: 22px;
+  }
+
+  .day-status {
+    font-size: 11.5px;
+  }
+
+  .day-pager-button span {
+    font-size: 11.5px;
+  }
+
+  .day-pager-button em {
+    font-size: 16.5px;
+  }
+}
