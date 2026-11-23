@@ -28,6 +28,7 @@
     <symbol id="icon-chevron-down" viewBox="0 0 24 24"><path d="m6 9.5 6 6 6-6"/></symbol>
     <symbol id="icon-close" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></symbol>
     <symbol id="icon-moon" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4 8.2 8.2 0 1 0 20 14.5Z"/></symbol>
+    <symbol id="icon-message" viewBox="0 0 24 24"><path d="M4 5.5h16v11H9l-5 4v-15Z"/><path d="M8 9h8M8 12.5h5"/></symbol>
     <symbol id="icon-activity" viewBox="0 0 24 24"><path d="M3 12h4l2.2-6 4.1 12 2.2-6H21"/></symbol>
     <symbol id="icon-target" viewBox="0 0 24 24">
       <circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r=".8" fill="currentColor" stroke="none"/>
@@ -223,6 +224,10 @@ npm start</code></pre>
           <button class="nav-item" type="button" data-view="wellness">
             <svg class="icon" aria-hidden="true"><use href="#icon-moon"></use></svg>
             <span>健康</span>
+          </button>
+          <button class="nav-item" type="button" data-view="messages">
+            <svg class="icon" aria-hidden="true"><use href="#icon-message"></use></svg>
+            <span>留言板</span>
           </button>
           <button class="nav-item" type="button" data-view="kitchen">
             <svg class="icon" aria-hidden="true"><use href="#icon-users"></use></svg>
@@ -534,6 +539,36 @@ npm start</code></pre>
         </section>
       </section>
 
+      <!-- ============ Message board ============ -->
+      <section class="view shell" id="messagesView" aria-labelledby="messagesTitle" hidden>
+        <header class="view-head">
+          <div class="view-heading">
+            <p class="eyebrow"><span class="eyebrow-dash"></span>KITCHEN NOTES</p>
+            <h1 id="messagesTitle">留言板<span class="title-dot">.</span></h1>
+            <p class="view-lede">给同一间厨房的人留个话，分享今天的安排，或只是说一句晚安。</p>
+          </div>
+          <div class="view-head-actions">
+            <span class="count-chip" id="messageCountLabel">0 条留言</span>
+            <span class="wellness-private">仅厨房成员可见</span>
+          </div>
+        </header>
+
+        <section class="message-board-card">
+          <form class="message-form" id="messageForm">
+            <label class="visually-hidden" for="messageInput">留言内容</label>
+            <textarea id="messageInput" maxlength="500" placeholder="给厨房里的朋友留个话…" aria-describedby="messageLength"></textarea>
+            <div class="message-form-foot">
+              <span class="message-length" id="messageLength">0 / 500</span>
+              <button class="button button-primary message-submit" id="messageSubmit" type="submit">
+                <svg class="icon" aria-hidden="true"><use href="#icon-arrow-right"></use></svg>
+                张贴留言
+              </button>
+            </div>
+          </form>
+          <div class="message-list" id="messageList"></div>
+        </section>
+      </section>
+
       <!-- ============ Kitchen ============ -->
       <section class="view shell" id="kitchenView" aria-labelledby="kitchenTitle" hidden>
         <header class="view-head">
@@ -664,29 +699,6 @@ npm start</code></pre>
           </aside>
         </div>
 
-        <section class="message-board-card">
-          <div class="card-heading">
-            <div>
-              <p class="card-kicker">KITCHEN NOTES</p>
-              <h2>留言板</h2>
-            </div>
-            <span class="member-hint" id="messageCountLabel">0 条留言</span>
-          </div>
-          <p class="message-board-copy">厨房里的每个人都可以在这里留话，分享今天的安排，或只是说一句晚安。</p>
-          <form class="message-form" id="messageForm">
-            <label class="visually-hidden" for="messageInput">留言内容</label>
-            <textarea id="messageInput" maxlength="500" placeholder="给厨房里的朋友留个话…" aria-describedby="messageLength"></textarea>
-            <div class="message-form-foot">
-              <span class="message-length" id="messageLength">0 / 500</span>
-              <button class="button button-primary message-submit" id="messageSubmit" type="submit">
-                <svg class="icon" aria-hidden="true"><use href="#icon-arrow-right"></use></svg>
-                张贴留言
-              </button>
-            </div>
-          </form>
-          <div class="message-list" id="messageList"></div>
-        </section>
-
         <section class="my-kitchens-section">
           <div class="card-heading">
             <div>
@@ -719,6 +731,10 @@ npm start</code></pre>
       <button class="mobile-tab" type="button" data-view="wellness">
         <svg class="icon" aria-hidden="true"><use href="#icon-moon"></use></svg>
         <span>健康</span>
+      </button>
+      <button class="mobile-tab" type="button" data-view="messages">
+        <svg class="icon" aria-hidden="true"><use href="#icon-message"></use></svg>
+        <span>留言</span>
       </button>
       <button class="mobile-tab" type="button" data-view="kitchen">
         <svg class="icon" aria-hidden="true"><use href="#icon-users"></use></svg>

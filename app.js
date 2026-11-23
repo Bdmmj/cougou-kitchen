@@ -300,7 +300,7 @@
 
   function viewFromHash() {
     const raw = location.hash.replace(/^#\/?/, "").split("?")[0];
-    return ["planner", "ingredients", "wellness", "kitchen"].includes(raw) ? raw : "planner";
+    return ["planner", "ingredients", "wellness", "messages", "kitchen"].includes(raw) ? raw : "planner";
   }
 
   /* =========================================================
@@ -828,6 +828,7 @@
       if (render) {
         renderChrome();
         renderKitchen();
+        renderMessages();
         renderPlanner();
         renderIngredients();
       }
@@ -900,7 +901,7 @@
           await refreshPlan({ silent: true });
         } else if (state.view === "ingredients") {
           await refreshIngredients({ silent: true });
-        } else if (state.view === "kitchen") {
+        } else if (state.view === "kitchen" || state.view === "messages") {
           await refreshKitchenDetail();
         }
         if (state.pollTick % 4 === 0) {
@@ -1967,7 +1968,6 @@
 
     renderActiveInvites(owner);
     renderMemberList(owner);
-    renderMessages();
     renderKitchenList();
   }
 
@@ -2158,7 +2158,7 @@
 
   function setView(view, { updateHash = true } = {}) {
     if (!state.user) return;
-    if (!["planner", "ingredients", "wellness", "kitchen"].includes(view)) view = "planner";
+    if (!["planner", "ingredients", "wellness", "messages", "kitchen"].includes(view)) view = "planner";
     if (!state.kitchen) view = "kitchen";
     if (view !== "ingredients" && state.ingredientBulkMode) {
       state.ingredientBulkMode = false;
@@ -2169,6 +2169,7 @@
     dom.plannerView.hidden = view !== "planner";
     dom.ingredientsView.hidden = view !== "ingredients";
     dom.wellnessView.hidden = view !== "wellness";
+    dom.messagesView.hidden = view !== "messages";
     dom.kitchenView.hidden = view !== "kitchen";
     selectNav(view);
 
@@ -2179,6 +2180,11 @@
     } else if (view === "wellness") {
       renderWellness();
       loadWellness();
+    } else if (view === "messages") {
+      renderMessages();
+      refreshKitchenDetail({ render: false }).then(() => {
+        if (state.view === "messages") renderMessages();
+      });
     } else if (view === "kitchen") {
       renderKitchen();
     }
@@ -2188,7 +2194,7 @@
     }
 
     if (state.kitchen) {
-      const names = { planner: "一周食谱", ingredients: "食材库", wellness: "健康", kitchen: "厨房" };
+      const names = { planner: "一周食谱", ingredients: "食材库", wellness: "健康", messages: "留言板", kitchen: "厨房" };
       document.title = `${names[view]} · ${state.kitchen.name} | 凑狗厨房`;
     }
 
@@ -3397,6 +3403,7 @@
     dom.ingredientsView = id("ingredientsView");
     dom.kitchenView = id("kitchenView");
     dom.wellnessView = id("wellnessView");
+    dom.messagesView = id("messagesView");
     dom.wellnessRange = id("wellnessRange");
     dom.wellnessDays = id("wellnessDays");
     dom.sleepBedtime = id("sleepBedtime");

@@ -8284,3 +8284,18 @@ body {
     height: 32px;
   }
 }
+
+@media (max-width: 880px) {
+  .mobile-tabbar {
+    grid-template-columns: repeat(5, 1fr);
+  }
+
+  .mobile-tab {
+    font-size: 9.5px;
+  }
+
+  .mobile-tab .icon {
+    width: 16px;
+    height: 16px;
+  }
+}
