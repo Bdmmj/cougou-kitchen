@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="theme-color" content="#23281f">
+  <title>管理后台 · 凑狗厨房</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='18' fill='%23d86446'/%3E%3Cpath d='M18 28c-2-8 5-12 9-4' fill='%23f8efdd'/%3E%3Cpath d='M46 28c2-8-5-12-9-4' fill='%23f8efdd'/%3E%3Cpath d='M20 30c0-7 5.4-12 12-12s12 5 12 12v7c0 8-5.4 13-12 13s-12-5-12-13z' fill='%23fbf4e6'/%3E%3Ccircle cx='27' cy='31' r='2' fill='%232b2a24'/%3E%3Ccircle cx='37' cy='31' r='2' fill='%232b2a24'/%3E%3Ccircle cx='32' cy='36' r='2.6' fill='%232b2a24'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/admin.css">
+  <script src="/admin.js" defer></script>
+</head>
+<body class="admin-body">
+  <svg class="svg-sprite" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <symbol id="logo-mark" viewBox="0 0 44 44">
+      <rect width="44" height="44" rx="13.5" fill="#d86446"/>
+      <path d="M12.6 19.1c-1.2-4.9 3.1-7.5 5.9-2.5" fill="#f6ead7"/>
+      <path d="M31.4 19.1c1.2-4.9-3.1-7.5-5.9-2.5" fill="#f6ead7"/>
+      <path d="M14.2 21.2c0-4 3.5-7.2 7.8-7.2s7.8 3.2 7.8 7.2v4.9c0 5.2-3.5 8.5-7.8 8.5s-7.8-3.3-7.8-8.5v-4.9Z" fill="#fbf4e6"/>
+      <circle cx="19.2" cy="22.3" r="1.35" fill="#2b2a24"/>
+      <circle cx="24.8" cy="22.3" r="1.35" fill="#2b2a24"/>
+      <path d="M21 25.8c.7.7 1.3 1 2 1s1.3-.3 2-1" fill="none" stroke="#2b2a24" stroke-width="1.3" stroke-linecap="round"/>
+      <path d="M20.2 27.1c.4-1.4 1.5-2 2.8-2s2.4.6 2.8 2" fill="#2b2a24"/>
+    </symbol>
+    <symbol id="icon-grid" viewBox="0 0 24 24"><rect x="4" y="4" width="6" height="6" rx="1"/><rect x="14" y="4" width="6" height="6" rx="1"/><rect x="4" y="14" width="6" height="6" rx="1"/><rect x="14" y="14" width="6" height="6" rx="1"/></symbol>
+    <symbol id="icon-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 20c.4-4 2.4-6 5.5-6s5.1 2 5.5 6M15.5 5.2a3.2 3.2 0 0 1 0 5.9M16.5 14.5c2.4.5 3.8 2.3 4 5.5"/></symbol>
+    <symbol id="icon-kitchen" viewBox="0 0 24 24"><path d="M4 11h16c0 5-3.6 8-8 8s-8-3-8-8ZM8 11c0-2.2 1.8-4 4-4s4 1.8 4 4M7 21h10"/></symbol>
+    <symbol id="icon-mail" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m4 7 8 6 8-6"/></symbol>
+    <symbol id="icon-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7v5l3.5 2"/></symbol>
+    <symbol id="icon-shield" viewBox="0 0 24 24"><path d="M12 3 20 6v5.4c0 4.6-3.1 7.7-8 9.6-4.9-1.9-8-5-8-9.6V6l8-3Z"/><path d="m8.7 12.1 2.1 2.1 4.5-4.7"/></symbol>
+    <symbol id="icon-refresh" viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 7M20 4v7h-7"/></symbol>
+    <symbol id="icon-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5"/></symbol>
+    <symbol id="icon-logout" viewBox="0 0 24 24"><path d="M10 4H5v16h5M14 8l4 4-4 4M18 12H9"/></symbol>
+    <symbol id="icon-arrow-left" viewBox="0 0 24 24"><path d="M20 12H4M10 6l-6 6 6 6"/></symbol>
+    <symbol id="icon-arrow-right" viewBox="0 0 24 24"><path d="M4 12h16M14 6l6 6-6 6"/></symbol>
+    <symbol id="icon-close" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></symbol>
+    <symbol id="icon-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6.5 7l.8 12h9.4l.8-12M10 11v5M14 11v5"/></symbol>
+    <symbol id="icon-eye" viewBox="0 0 24 24"><path d="M2.8 12S6.5 5.8 12 5.8 21.2 12 21.2 12 17.5 18.2 12 18.2 2.8 12 2.8 12Z"/><circle cx="12" cy="12" r="3"/></symbol>
+    <symbol id="icon-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.7"/><path d="M4.5 20c.5-4.3 3.1-6.5 7.5-6.5s7 2.2 7.5 6.5"/></symbol>
+    <symbol id="icon-alert" viewBox="0 0 24 24"><path d="M12 3 2.8 20h18.4L12 3Z"/><path d="M12 9v5M12 17.2h.01"/></symbol>
+  </svg>
+
+  <div class="page-grain" aria-hidden="true"></div>
+
+  <div class="admin-boot" id="adminBoot">
+    <svg class="brand-mark" viewBox="0 0 44 44" aria-hidden="true"><use href="#logo-mark"></use></svg>
+    <p>正在打开管理后台…</p>
+  </div>
+
+  <!-- Login gate -->
+  <section class="admin-gate" id="adminLogin" hidden>
+    <div class="admin-gate-story">
+      <div class="brand brand-inverse">
+        <svg class="brand-mark" viewBox="0 0 44 44" aria-hidden="true"><use href="#logo-mark"></use></svg>
+        <span class="brand-copy">
+          <span class="brand-name">凑狗厨房</span>
+          <span class="brand-en">COUGOU KITCHEN</span>
+        </span>
+      </div>
+      <div class="admin-gate-copy">
+        <p class="eyebrow eyebrow-light"><span class="eyebrow-dash"></span>ADMIN ACCESS</p>
+        <h1>把厨房照顾好，<br>数据也要有数。</h1>
+        <p>这里是凑狗厨房的管理后台。只有被授权的管理员账号才能查看和管理全站数据。</p>
+      </div>
+      <div class="admin-gate-foot">
+        <span class="admin-gate-stamp">LOCAL · SQLITE</span>
+        <span>仅管理员可访问</span>
+      </div>
+    </div>
+
+    <div class="admin-gate-panel">
+      <div class="admin-gate-card">
+        <div class="admin-mobile-brand">
+          <svg class="brand-mark" viewBox="0 0 44 44" aria-hidden="true"><use href="#logo-mark"></use></svg>
+          <span>凑狗厨房 · 管理后台</span>
+        </div>
+        <p class="admin-kicker">ADMIN CONSOLE</p>
+        <h2>管理员登录</h2>
+        <p class="admin-gate-sub">请使用已被授予管理员权限的账号登录。</p>
+        <form id="adminLoginForm" novalidate>
+          <label class="admin-field">
+            <span>用户名</span>
+            <input id="adminUsername" type="text" autocomplete="username" required>
+          </label>
+          <label class="admin-field">
+            <span>密码</span>
+            <input id="adminPassword" type="password" autocomplete="current-password" required>
+          </label>
+          <p class="form-error" id="adminLoginError" role="alert" hidden></p>
+          <button class="button button-primary admin-login-submit" id="adminLoginSubmit" type="submit">进入后台</button>
+        </form>
+        <div class="admin-gate-hint">
+          <svg class="icon" aria-hidden="true"><use href="#icon-shield"></use></svg>
+          <p>如果还没有管理员账号，请使用 <code>npm run make-admin -- 用户名</code> 授权。</p>
+        </div>
+        <a class="admin-back-link" href="/">
+          <svg class="icon" aria-hidden="true"><use href="#icon-arrow-left"></use></svg>
+          返回凑狗厨房
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Denied -->
+  <section class="admin-gate admin-gate-denied" id="adminDenied" hidden>
+    <div class="admin-denied-card">
+      <span class="admin-denied-icon" aria-hidden="true"><svg class="icon"><use href="#icon-shield"></use></svg></span>
+      <p class="admin-kicker">ACCESS DENIED</p>
+      <h1>这个账号没有管理权限</h1>
+      <p>当前账号 <strong id="deniedUserName">—</strong> 不是管理员。请换用管理员账号，或回到厨房继续使用。</p>
+      <div class="admin-denied-actions">
+        <button class="button button-primary" id="deniedLogout" type="button">换一个账号</button>
+        <a class="button button-quiet" href="/">返回厨房</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Console -->
+  <div class="admin-shell" id="adminApp" hidden>
+    <aside class="admin-sidebar">
+      <a class="admin-brand" href="/admin" aria-label="管理后台">
+        <svg class="brand-mark" viewBox="0 0 44 44" aria-hidden="true"><use href="#logo-mark"></use></svg>
+        <span class="admin-brand-copy">
+          <strong>凑狗厨房</strong>
+          <small>ADMIN CONSOLE</small>
+        </span>
+      </a>
+
+      <nav class="admin-nav" id="adminNav" aria-label="管理后台导航">
+        <button class="admin-nav-item is-active" type="button" data-admin-section="overview">
+          <svg class="icon" aria-hidden="true"><use href="#icon-grid"></use></svg><span>概览</span>
+        </button>
+        <button class="admin-nav-item" type="button" data-admin-section="users">
+          <svg class="icon" aria-hidden="true"><use href="#icon-users"></use></svg><span>用户</span>
+        </button>
+        <button class="admin-nav-item" type="button" data-admin-section="kitchens">
+          <svg class="icon" aria-hidden="true"><use href="#icon-kitchen"></use></svg><span>厨房</span>
+        </button>
+        <button class="admin-nav-item" type="button" data-admin-section="invites">
+          <svg class="icon" aria-hidden="true"><use href="#icon-mail"></use></svg><span>邀请</span>
+        </button>
+        <button class="admin-nav-item" type="button" data-admin-section="sessions">
+          <svg class="icon" aria-hidden="true"><use href="#icon-clock"></use></svg><span>会话</span>
+        </button>
+      </nav>
+
+      <div class="admin-sidebar-foot">
+        <a class="admin-back-link" href="/">
+          <svg class="icon" aria-hidden="true"><use href="#icon-arrow-left"></use></svg>
+          返回厨房
+        </a>
+        <div class="admin-who">
+          <span class="admin-avatar" id="sidebarAvatar">管</span>
+          <div>
+            <strong id="sidebarName">管理员</strong>
+            <small>管理员账号</small>
+          </div>
+        </div>
+        <button class="admin-logout" id="adminLogout" type="button">
+          <svg class="icon" aria-hidden="true"><use href="#icon-logout"></use></svg>
+          退出登录
+        </button>
+      </div>
+    </aside>
+
+    <div class="admin-main">
+      <header class="admin-topbar">
+        <div>
+          <p class="admin-kicker">ADMINISTRATION</p>
+          <h1 id="adminHeading">数据概览</h1>
+        </div>
+        <div class="admin-top-actions">
+          <span class="admin-updated" id="adminUpdated">尚未刷新</span>
+          <button class="admin-icon-button" id="adminRefresh" type="button">
+            <svg class="icon" aria-hidden="true"><use href="#icon-refresh"></use></svg>
+            刷新
+          </button>
+        </div>
+      </header>
+
+      <main class="admin-content">
+        <section class="admin-panel" data-admin-panel="overview">
+          <div class="admin-intro">
+            <div>
+              <p class="admin-kicker">OVERVIEW</p>
+              <h2>今天，厨房里有多少事？</h2>
+              <p>所有账号、厨房、食材与食谱数据都在这里。危险操作会先向你确认。</p>
+            </div>
+            <span class="admin-db-pill">LOCAL SQLITE</span>
+          </div>
+
+          <div class="admin-stats" id="adminStats">
+            <article class="admin-stat"><span>用户</span><strong id="statUsers">—</strong><small>accounts</small></article>
+            <article class="admin-stat"><span>管理员</span><strong id="statAdmins">—</strong><small>admins</small></article>
+            <article class="admin-stat"><span>厨房</span><strong id="statKitchens">—</strong><small>kitchens</small></article>
+            <article class="admin-stat"><span>食材预设</span><strong id="statIngredients">—</strong><small>ingredients</small></article>
+            <article class="admin-stat"><span>食谱记录</span><strong id="statPlanItems">—</strong><small>meal records</small></article>
+            <article class="admin-stat"><span>有效邀请</span><strong id="statInvites">—</strong><small>invites</small></article>
+            <article class="admin-stat"><span>活跃会话</span><strong id="statSessions">—</strong><small>sessions</small></article>
+          </div>
+
+          <div class="admin-grid-two">
+            <section class="admin-card">
+              <div class="admin-card-head">
+                <div><p class="admin-kicker">RECENT PEOPLE</p><h3>最近加入</h3></div>
+                <button class="admin-text-button" type="button" data-admin-section="users">全部用户 →</button>
+              </div>
+              <div class="admin-compact-list" id="recentUsers"></div>
+            </section>
+            <section class="admin-card">
+              <div class="admin-card-head">
+                <div><p class="admin-kicker">RECENT KITCHENS</p><h3>最近更新的厨房</h3></div>
+                <button class="admin-text-button" type="button" data-admin-section="kitchens">全部厨房 →</button>
+              </div>
+              <div class="admin-compact-list" id="recentKitchens"></div>
+            </section>
+          </div>
+
+          <div class="admin-tip">
+            <svg class="icon" aria-hidden="true"><use href="#icon-shield"></use></svg>
+            <p>管理员可以查看全站数据、调整管理员身份、删除用户或厨房、撤回邀请与登录会话。删除操作会级联移除相关数据，请谨慎处理。</p>
+          </div>
+        </section>
+
+        <section class="admin-panel" data-admin-panel="users" hidden>
+          <div class="admin-section-head">
+            <div><p class="admin-kicker">ACCOUNTS</p><h2>用户</h2></div>
+            <div class="admin-tools">
+              <label class="admin-search">
+                <svg class="icon" aria-hidden="true"><use href="#icon-search"></use></svg>
+                <input id="userSearch" type="search" placeholder="搜索用户名或昵称" aria-label="搜索用户">
+              </label>
+              <span class="admin-count" id="userCount">—</span>
+            </div>
+          </div>
+          <div class="admin-table-card">
+            <div class="admin-table-wrap">
+              <table class="admin-table">
+                <thead><tr><th>用户</th><th>权限</th><th>厨房</th><th>会话</th><th>加入时间</th><th class="align-right">操作</th></tr></thead>
+                <tbody id="userRows"></tbody>
+              </table>
+            </div>
+            <div class="admin-empty" id="userEmpty" hidden>没有找到匹配的用户。</div>
+          </div>
+        </section>
+
+        <section class="admin-panel" data-admin-panel="kitchens" hidden>
+          <div class="admin-section-head">
+            <div><p class="admin-kicker">SHARED TABLES</p><h2>厨房</h2></div>
+            <div class="admin-tools">
+              <label class="admin-search">
+                <svg class="icon" aria-hidden="true"><use href="#icon-search"></use></svg>
+                <input id="kitchenSearch" type="search" placeholder="搜索厨房或主人" aria-label="搜索厨房">
+              </label>
+              <span class="admin-count" id="kitchenCount">—</span>
+            </div>
+          </div>
+          <div class="admin-table-card">
+            <div class="admin-table-wrap">
+              <table class="admin-table">
+                <thead><tr><th>厨房</th><th>主人</th><th>成员</th><th>食材 / 食谱</th><th>每日目标</th><th>更新时间</th><th class="align-right">操作</th></tr></thead>
+                <tbody id="kitchenRows"></tbody>
+              </table>
+            </div>
+            <div class="admin-empty" id="kitchenEmpty" hidden>没有找到匹配的厨房。</div>
+          </div>
+        </section>
+
+        <section class="admin-panel" data-admin-panel="invites" hidden>
+          <div class="admin-section-head">
+            <div><p class="admin-kicker">INVITATIONS</p><h2>邀请</h2></div>
+            <span class="admin-count" id="inviteCount">—</span>
+          </div>
+          <div class="admin-table-card">
+            <div class="admin-table-wrap">
+              <table class="admin-table">
+                <thead><tr><th>厨房</th><th>身份</th><th>创建者</th><th>到期时间</th><th>状态</th><th class="align-right">操作</th></tr></thead>
+                <tbody id="inviteRows"></tbody>
+              </table>
+            </div>
+            <div class="admin-empty" id="inviteEmpty" hidden>还没有邀请记录。</div>
+          </div>
+        </section>
+
+        <section class="admin-panel" data-admin-panel="sessions" hidden>
+          <div class="admin-section-head">
+            <div><p class="admin-kicker">ACTIVE SESSIONS</p><h2>登录会话</h2></div>
+            <span class="admin-count" id="sessionCount">—</span>
+          </div>
+          <div class="admin-table-card">
+            <div class="admin-table-wrap">
+              <table class="admin-table">
+                <thead><tr><th>用户</th><th>登录时间</th><th>到期时间</th><th class="align-right">操作</th></tr></thead>
+                <tbody id="sessionRows"></tbody>
+              </table>
+            </div>
+            <div class="admin-empty" id="sessionEmpty" hidden>目前没有活跃会话。</div>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <!-- Confirmation -->
+  <div class="modal-layer" id="adminConfirmModal" hidden>
+    <div class="modal-scrim" data-close-admin-confirm></div>
+    <section class="modal modal-small" role="alertdialog" aria-modal="true" aria-labelledby="adminConfirmTitle" aria-describedby="adminConfirmCopy" tabindex="-1">
+      <div class="modal-head">
+        <div>
+          <p class="modal-kicker">PLEASE CONFIRM</p>
+          <h2 id="adminConfirmTitle">确认操作</h2>
+        </div>
+        <button class="modal-close" type="button" data-close-admin-confirm aria-label="关闭">
+          <svg class="icon" aria-hidden="true"><use href="#icon-close"></use></svg>
+        </button>
+      </div>
+      <p class="modal-copy" id="adminConfirmCopy"></p>
+      <div class="modal-actions">
+        <span class="actions-spacer"></span>
+        <button class="button button-quiet" type="button" data-close-admin-confirm>取消</button>
+        <button class="button button-danger" id="adminConfirmButton" type="button">确认</button>
+      </div>
+    </section>
+  </div>
+
+  <!-- Kitchen detail -->
+  <div class="modal-layer" id="kitchenDetailModal" hidden>
+    <div class="modal-scrim" data-close-kitchen-detail></div>
+    <section class="modal admin-detail-modal" role="dialog" aria-modal="true" aria-labelledby="kitchenDetailTitle" tabindex="-1">
+      <div class="modal-head">
+        <div>
+          <p class="modal-kicker">KITCHEN DATA</p>
+          <h2 id="kitchenDetailTitle">厨房详情</h2>
+        </div>
+        <button class="modal-close" type="button" data-close-kitchen-detail aria-label="关闭">
+          <svg class="icon" aria-hidden="true"><use href="#icon-close"></use></svg>
+        </button>
+      </div>
+      <div class="admin-detail-body" id="kitchenDetailBody"></div>
+    </section>
+  </div>
+
+  <div class="toast" id="adminToast" role="status" aria-live="polite" hidden>
+    <span class="toast-dot" aria-hidden="true"></span>
+    <span id="adminToastText"></span>
+  </div>
+</body>
+</html>

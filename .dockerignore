@@ -1,0 +1,9 @@
+data/
+node_modules/
+.git/
+.DS_Store
+preview-*.png
+README.md
+DEPLOY.md
+启动厨房.command
+.cloudflared/

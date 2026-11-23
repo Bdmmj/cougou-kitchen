@@ -1,0 +1,15 @@
+{
+  "name": "cougou-kitchen",
+  "version": "2.0.0",
+  "private": true,
+  "description": "凑狗厨房：多人共享的一周食谱与食材库",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "make-admin": "node scripts/make-admin.js"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}
