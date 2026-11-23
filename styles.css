@@ -6056,7 +6056,7 @@ p {
   display: none;
 }
 
-@media (max-width: 760px) {
+@media (max-width: 880px) {
   .auth-view {
     display: block;
     min-height: 100dvh;
@@ -6223,5 +6223,143 @@ p {
     padding: 14px 20px max(18px, env(safe-area-inset-bottom));
     background: var(--card);
     font-size: 7.5px;
+  }
+}
+
+/* ---------- Mobile: one full-screen recipe day at a time ---------- */
+
+.day-pager {
+  display: none;
+}
+
+@media (max-width: 880px) {
+  body {
+    overflow-x: hidden;
+  }
+
+  .day-pager {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 4px;
+    margin-top: 13px;
+  }
+
+  .day-pager-button {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    min-width: 0;
+    height: 47px;
+    padding: 0;
+    border: 1px solid transparent;
+    border-radius: 11px;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+
+  .day-pager-button span {
+    color: var(--faint);
+    font-size: 8.5px;
+    line-height: 1;
+  }
+
+  .day-pager-button em {
+    font-family: var(--serif);
+    font-size: 14px;
+    font-style: normal;
+    font-weight: 700;
+    line-height: 1;
+  }
+
+  .day-pager-button.is-today:not(.is-active) {
+    color: var(--tomato-deep);
+  }
+
+  .day-pager-button.is-today:not(.is-active) span {
+    color: var(--tomato);
+  }
+
+  .day-pager-button.is-active {
+    border-color: var(--ink);
+    background: var(--ink);
+    color: var(--cream);
+    box-shadow: 0 4px 12px -8px rgba(50, 42, 30, 0.55);
+  }
+
+  .day-pager-button.is-active span {
+    color: rgba(248, 241, 226, 0.86);
+    font-size: 9.5px;
+  }
+
+  #planner {
+    scroll-margin-top: 78px;
+  }
+
+  .board-shell {
+    margin-top: 12px;
+    margin-inline: -14px;
+  }
+
+  .week-board {
+    gap: 0;
+    padding-bottom: 0;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
+    overscroll-behavior-x: contain;
+  }
+
+  .week-board::-webkit-scrollbar {
+    display: none;
+  }
+
+  .day-card {
+    flex: 0 0 100%;
+    width: 100%;
+    scroll-snap-align: start;
+    scroll-snap-stop: always;
+    border-radius: 20px;
+  }
+
+  /* Category filters must wrap instead of asking for a sideways swipe. */
+  .category-tabs {
+    flex-wrap: wrap;
+    overflow: visible;
+    border-radius: 16px;
+  }
+
+  .category-tab {
+    flex: 0 0 calc(33.333% - 4px);
+    justify-content: center;
+    padding-inline: 6px;
+  }
+}
+
+
+@media (max-width: 880px) {
+  .text-input,
+  .select-input,
+  .number-wrap input,
+  .search-box input,
+  .auth-field input,
+  .admin-field input,
+  .admin-search input,
+  textarea,
+  select {
+    font-size: 16px;
+  }
+
+  .meal-add {
+    width: 30px;
+    height: 30px;
+  }
+}
+
+@media (max-width: 880px) {
+  .shell {
+    width: calc(100% - 28px);
   }
 }

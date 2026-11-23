@@ -387,7 +387,7 @@
 
         return `
           <tr>
-            <td>
+            <td class="admin-cell-primary">
               <div class="admin-user-cell">
                 <span class="admin-row-avatar">${escapeHtml(firstCharacter(user.displayName))}</span>
                 <div class="admin-user-copy">
@@ -396,11 +396,11 @@
                 </div>
               </div>
             </td>
-            <td>${user.isAdmin ? '<span class="admin-badge is-admin">管理员</span>' : '<span class="admin-badge">普通用户</span>'}</td>
-            <td>${number(user.kitchenCount)} 间 <span class="admin-cell-muted">/ 拥有 ${number(user.ownedKitchenCount)}</span></td>
-            <td>${number(user.activeSessions)} 个</td>
-            <td class="admin-cell-muted">${escapeHtml(shortDate(user.createdAt))}</td>
-            <td>${actions}</td>
+            <td data-label="权限">${user.isAdmin ? '<span class="admin-badge is-admin">管理员</span>' : '<span class="admin-badge">普通用户</span>'}</td>
+            <td data-label="厨房">${number(user.kitchenCount)} 间 <span class="admin-cell-muted">/ 拥有 ${number(user.ownedKitchenCount)}</span></td>
+            <td data-label="会话">${number(user.activeSessions)} 个</td>
+            <td class="admin-cell-muted" data-label="加入">${escapeHtml(shortDate(user.createdAt))}</td>
+            <td data-label="操作">${actions}</td>
           </tr>
         `;
       })
@@ -422,18 +422,18 @@
       .map(
         (kitchen) => `
           <tr>
-            <td>
+            <td class="admin-cell-primary">
               <div class="admin-kitchen-title">
                 <strong>${escapeHtml(kitchen.name)}</strong>
                 <span>${escapeHtml(kitchen.id)}</span>
               </div>
             </td>
-            <td>${escapeHtml(kitchen.ownerName)}</td>
-            <td>${number(kitchen.memberCount)} 人</td>
-            <td>${number(kitchen.ingredientCount)} / ${number(kitchen.planItemCount)}</td>
-            <td>${number(kitchen.dailyTarget)} kcal</td>
-            <td class="admin-cell-muted">${escapeHtml(shortDate(kitchen.updatedAt))}</td>
-            <td>
+            <td data-label="主人">${escapeHtml(kitchen.ownerName)}</td>
+            <td data-label="成员">${number(kitchen.memberCount)} 人</td>
+            <td data-label="食材 / 食谱">${number(kitchen.ingredientCount)} / ${number(kitchen.planItemCount)}</td>
+            <td data-label="每日目标">${number(kitchen.dailyTarget)} kcal</td>
+            <td class="admin-cell-muted" data-label="更新">${escapeHtml(shortDate(kitchen.updatedAt))}</td>
+            <td data-label="操作">
               <div class="admin-row-actions">
                 <button class="admin-row-button" type="button" data-view-kitchen="${escapeHtml(kitchen.id)}">查看</button>
                 <button class="admin-row-button is-danger" type="button" data-delete-kitchen="${escapeHtml(kitchen.id)}">删除</button>
@@ -460,12 +460,12 @@
               : "is-muted";
         return `
           <tr>
-            <td><div class="admin-kitchen-title"><strong>${escapeHtml(invite.kitchenName)}</strong><span>${escapeHtml(invite.kitchenId)}</span></div></td>
-            <td>${escapeHtml(inviteRoleLabel(invite.role))}</td>
-            <td>${escapeHtml(invite.creatorName)}</td>
-            <td class="admin-cell-muted">${escapeHtml(formatDateTime(invite.expiresAt))}</td>
-            <td><span class="admin-badge ${badgeClass}">${status.label}</span></td>
-            <td>
+            <td class="admin-cell-primary"><div class="admin-kitchen-title"><strong>${escapeHtml(invite.kitchenName)}</strong><span>${escapeHtml(invite.kitchenId)}</span></div></td>
+            <td data-label="身份">${escapeHtml(inviteRoleLabel(invite.role))}</td>
+            <td data-label="创建者">${escapeHtml(invite.creatorName)}</td>
+            <td class="admin-cell-muted" data-label="到期">${escapeHtml(formatDateTime(invite.expiresAt))}</td>
+            <td data-label="状态"><span class="admin-badge ${badgeClass}">${status.label}</span></td>
+            <td data-label="操作">
               <div class="admin-row-actions">
                 ${
                   status.key === "active"
@@ -488,7 +488,7 @@
       .map(
         (session) => `
           <tr>
-            <td>
+            <td class="admin-cell-primary">
               <div class="admin-user-cell">
                 <span class="admin-row-avatar">${escapeHtml(firstCharacter(session.displayName))}</span>
                 <div class="admin-user-copy">
@@ -497,9 +497,9 @@
                 </div>
               </div>
             </td>
-            <td class="admin-cell-muted">${escapeHtml(formatDateTime(session.createdAt))}</td>
-            <td class="admin-cell-muted">${escapeHtml(formatDateTime(session.expiresAt))}</td>
-            <td>
+            <td class="admin-cell-muted" data-label="登录">${escapeHtml(formatDateTime(session.createdAt))}</td>
+            <td class="admin-cell-muted" data-label="到期">${escapeHtml(formatDateTime(session.expiresAt))}</td>
+            <td data-label="操作">
               <div class="admin-row-actions">
                 <button class="admin-row-button is-danger" type="button" data-revoke-session="${escapeHtml(session.id)}">撤销</button>
               </div>

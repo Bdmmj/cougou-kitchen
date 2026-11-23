@@ -68,6 +68,9 @@
     realtime: true,
     pollTimer: null,
     pollTick: 0,
+    activeDayIndex: 0,
+    renderedWeekStart: null,
+    pendingPlannerJump: false,
   };
 
   const dom = {};
@@ -567,7 +570,7 @@
     renderAuthInviteBanner();
     // Do not pop the mobile keyboard before the user taps a field.
     requestAnimationFrame(() => {
-      if (window.matchMedia("(max-width: 760px)").matches) return;
+      if (window.matchMedia("(max-width: 880px)").matches) return;
       dom.authUsername.focus({ preventScroll: true });
     });
   }
@@ -1172,22 +1175,77 @@
     dom.weekChart.setAttribute("aria-label", `本周每日热量：${chartDescription}`);
   }
 
+  function isMobileBoard() {
+    return window.matchMedia("(max-width: 880px)").matches;
+  }
+
+  function currentDayIndex() {
+    return (new Date().getDay() + 6) % 7;
+  }
+
+  function renderDayPager(dates, activeIndex) {
+    if (!dom.dayPager) return;
+    dom.dayPager.innerHTML = dates
+      .map((date, index) => {
+        const isActive = index === activeIndex;
+        const isToday = dateKey(date) === dateKey(new Date());
+        return `
+          <button
+            class="day-pager-button${isActive ? " is-active" : ""}${isToday ? " is-today" : ""}"
+            type="button"
+            data-day-index="${index}"
+            aria-label="${DAY_NAMES[index]} ${date.getMonth() + 1}月${date.getDate()}日"
+            aria-current="${isActive ? "true" : "false"}"
+          >
+            <span>${DAY_SHORT[index]}</span>
+            <em>${date.getDate()}</em>
+          </button>
+        `;
+      })
+      .join("");
+  }
+
+  function updateDayPager(activeIndex) {
+    if (!dom.dayPager) return;
+    dom.dayPager.querySelectorAll("[data-day-index]").forEach((button) => {
+      const isActive = Number(button.dataset.dayIndex) === activeIndex;
+      button.classList.toggle("is-active", isActive);
+      button.setAttribute("aria-current", String(isActive));
+    });
+  }
+
   function renderBoard({ preserveScroll = true } = {}) {
     const scrollLeft = dom.weekBoard.scrollLeft;
     const dates = getWeekDates(state.weekStart);
     const todayKey = dateKey(new Date());
     const editable = canEdit();
+    const weekKey = dateKey(state.weekStart);
 
     if (!state.plan) {
       dom.weekBoard.innerHTML = "";
+      if (dom.dayPager) dom.dayPager.innerHTML = "";
       return;
     }
+
+    if (state.renderedWeekStart !== weekKey) {
+      state.renderedWeekStart = weekKey;
+      state.activeDayIndex = isCurrentWeek(state.weekStart) ? currentDayIndex() : 0;
+    }
+    const activeIndex = Math.max(0, Math.min(6, Number(state.activeDayIndex) || 0));
+    state.activeDayIndex = activeIndex;
 
     dom.weekBoard.innerHTML = dates
       .map((date, index) => renderDayCard(date, index, todayKey, editable))
       .join("");
+    renderDayPager(dates, activeIndex);
 
-    if (preserveScroll) {
+    if (isMobileBoard()) {
+      requestAnimationFrame(() => {
+        const width = dom.weekBoard.clientWidth;
+        if (width) dom.weekBoard.scrollLeft = activeIndex * width;
+        updateDayPager(activeIndex);
+      });
+    } else if (preserveScroll) {
       dom.weekBoard.scrollLeft = scrollLeft;
     }
   }
@@ -1669,12 +1727,22 @@
       document.title = `${names[view]} · ${state.kitchen.name} | 凑狗厨房`;
     }
 
-    // Switching app sections should always start at the top, especially on mobile.
-    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    const jumpToPlanner = state.pendingPlannerJump && view === "planner" && isMobileBoard();
+    state.pendingPlannerJump = false;
+
+    if (jumpToPlanner) {
+      requestAnimationFrame(() => {
+        document.querySelector("#planner")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    } else {
+      // Switching app sections should always start at the top, especially on mobile.
+      window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    }
   }
 
   function navigate(view) {
     if (!state.user) return;
+    if (view === "planner" && isMobileBoard()) state.pendingPlannerJump = true;
     if (state.view === view && location.hash === `#/${view}`) {
       setView(view, { updateHash: false });
       return;
@@ -2760,6 +2828,7 @@
     dom.startBlank = id("startBlank");
     dom.dismissDemo = id("dismissDemo");
     dom.weekBoard = id("weekBoard");
+    dom.dayPager = id("dayPager");
     dom.boardLoading = id("boardLoading");
     dom.clearWeek = id("clearWeek");
     dom.footerYear = id("footerYear");
@@ -2937,6 +3006,42 @@
       if (foodButton && !foodButton.classList.contains("is-static")) {
         openFoodModal(foodButton.dataset.date, foodButton.dataset.meal, foodButton.dataset.id);
       }
+    });
+
+    dom.dayPager.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-day-index]");
+      if (!button) return;
+      const index = Number(button.dataset.dayIndex);
+      if (!Number.isInteger(index)) return;
+      state.activeDayIndex = index;
+      updateDayPager(index);
+      const width = dom.weekBoard.clientWidth;
+      dom.weekBoard.scrollTo({ left: index * width, behavior: "auto" });
+    });
+
+    let boardScrollFrame = 0;
+    dom.weekBoard.addEventListener("scroll", () => {
+      if (!isMobileBoard()) return;
+      cancelAnimationFrame(boardScrollFrame);
+      boardScrollFrame = requestAnimationFrame(() => {
+        const width = dom.weekBoard.clientWidth;
+        if (!width) return;
+        const index = Math.max(0, Math.min(6, Math.round(dom.weekBoard.scrollLeft / width)));
+        if (index !== state.activeDayIndex) {
+          state.activeDayIndex = index;
+          updateDayPager(index);
+        }
+      });
+    }, { passive: true });
+
+    let boardResizeTimer = 0;
+    window.addEventListener("resize", () => {
+      if (!isMobileBoard()) return;
+      clearTimeout(boardResizeTimer);
+      boardResizeTimer = setTimeout(() => {
+        const width = dom.weekBoard.clientWidth;
+        if (width) dom.weekBoard.scrollLeft = state.activeDayIndex * width;
+      }, 120);
     });
 
     dom.addIngredientButton.addEventListener("click", () => openIngredientModal());
