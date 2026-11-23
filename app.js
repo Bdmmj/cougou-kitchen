@@ -1922,7 +1922,7 @@
       modal.classList.add("is-open");
       const target =
         preferredFocus ||
-        modal.querySelector("#foodName, #targetInput, #ingredientName, #newKitchenName, #ingredientCategory, .button-primary, button");
+        modal.querySelector("#foodName, #targetInput, #ingredientName, #newKitchenName, .button-primary, button");
       if (target) target.focus({ preventScroll: true });
       else modal.focus({ preventScroll: true });
     });
@@ -2514,6 +2514,16 @@
      Ingredient modal & actions
      ========================================================= */
 
+  function syncIngredientCategoryPicker(category) {
+    const validCategory = CATEGORY_META[category] ? category : "staple";
+    dom.ingredientCategory.value = validCategory;
+    dom.ingredientCategoryPicker.querySelectorAll("[data-category-choice]").forEach((button) => {
+      const active = button.dataset.categoryChoice === validCategory;
+      button.classList.toggle("is-active", active);
+      button.setAttribute("aria-checked", String(active));
+    });
+  }
+
   function openIngredientModal(ingredientId = null) {
     if (!canEdit()) return;
     const ingredient = ingredientId
@@ -2529,6 +2539,7 @@
     clearFormError(dom.ingredientName, dom.ingredientError);
     dom.ingredientName.value = ingredient ? ingredient.name : "";
     dom.ingredientCategory.value = ingredient ? ingredient.category : "staple";
+    syncIngredientCategoryPicker(dom.ingredientCategory.value);
     dom.ingredientUnit.value = ingredient ? ingredient.unit : "";
     dom.ingredientCalories.value = ingredient ? String(ingredient.calories) : "";
     dom.ingredientModalTitle.textContent = ingredient ? "编辑食材" : "新建食材";
@@ -3167,6 +3178,7 @@
     dom.ingredientModalTitle = id("ingredientModalTitle");
     dom.ingredientName = id("ingredientName");
     dom.ingredientCategory = id("ingredientCategory");
+    dom.ingredientCategoryPicker = id("ingredientCategoryPicker");
     dom.ingredientUnit = id("ingredientUnit");
     dom.ingredientCalories = id("ingredientCalories");
     dom.ingredientError = id("ingredientError");
@@ -3438,6 +3450,23 @@
         clearFormError(dom.targetInput, dom.targetError);
         dom.targetInput.focus({ preventScroll: true });
       });
+    });
+
+    dom.ingredientCategoryPicker.addEventListener("click", (event) => {
+      const choice = event.target.closest("[data-category-choice]");
+      if (!choice) return;
+      syncIngredientCategoryPicker(choice.dataset.categoryChoice);
+    });
+    dom.ingredientCategoryPicker.addEventListener("keydown", (event) => {
+      if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) return;
+      const buttons = [...dom.ingredientCategoryPicker.querySelectorAll("[data-category-choice]")];
+      const currentIndex = buttons.indexOf(document.activeElement);
+      if (currentIndex === -1) return;
+      event.preventDefault();
+      const direction = event.key === "ArrowLeft" || event.key === "ArrowUp" ? -1 : 1;
+      const next = buttons[(currentIndex + direction + buttons.length) % buttons.length];
+      next.focus();
+      syncIngredientCategoryPicker(next.dataset.categoryChoice);
     });
 
     dom.ingredientForm.addEventListener("submit", saveIngredient);

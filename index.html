@@ -838,15 +838,28 @@ npm start</code></pre>
         </div>
         <div class="form-row">
           <div class="form-group">
-            <label for="ingredientCategory">分类</label>
-            <select class="select-input" id="ingredientCategory">
-              <option value="staple">主食</option>
-              <option value="protein">蛋白质</option>
-              <option value="vegetable">蔬菜</option>
-              <option value="fruit">水果</option>
-              <option value="drink">饮品乳品</option>
-              <option value="other">其他</option>
-            </select>
+            <span class="category-picker-label" id="ingredientCategoryLabel">分类</span>
+            <input type="hidden" id="ingredientCategory" value="staple">
+            <div class="category-picker" id="ingredientCategoryPicker" role="radiogroup" aria-labelledby="ingredientCategoryLabel">
+              <button class="category-choice" type="button" role="radio" aria-checked="false" data-category-choice="staple">
+                <span class="category-choice-dot" aria-hidden="true"></span>主食
+              </button>
+              <button class="category-choice" type="button" role="radio" aria-checked="false" data-category-choice="protein">
+                <span class="category-choice-dot" aria-hidden="true"></span>蛋白质
+              </button>
+              <button class="category-choice" type="button" role="radio" aria-checked="false" data-category-choice="vegetable">
+                <span class="category-choice-dot" aria-hidden="true"></span>蔬菜
+              </button>
+              <button class="category-choice" type="button" role="radio" aria-checked="false" data-category-choice="fruit">
+                <span class="category-choice-dot" aria-hidden="true"></span>水果
+              </button>
+              <button class="category-choice" type="button" role="radio" aria-checked="false" data-category-choice="drink">
+                <span class="category-choice-dot" aria-hidden="true"></span>饮品乳品
+              </button>
+              <button class="category-choice" type="button" role="radio" aria-checked="false" data-category-choice="other">
+                <span class="category-choice-dot" aria-hidden="true"></span>其他
+              </button>
+            </div>
           </div>
           <div class="form-group">
             <label for="ingredientUnit">每份份量</label>
