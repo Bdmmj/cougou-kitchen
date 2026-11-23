@@ -1,128 +1,142 @@
-# 部署指南
+# 部署指南（Northflank Sandbox 免费计划）
 
-这是一个 Node.js + SQLite 的单进程应用。部署时必须满足两件事：
+这是一个长期运行的 Node.js + SQLite 服务，不是纯静态站。部署时必须同时满足：
 
-1. 能运行长期在线的 Node.js 进程；
-2. `/app/data` 有一个**持久化磁盘**，否则 SQLite 数据会在重启后丢失。
+1. 有常驻的 Node.js 容器；
+2. 把持久卷挂载到 `/app/data`，否则 SQLite 数据会在重新部署时丢失。
 
-## 推荐：Railway（免费计划 + 持久卷）
+当前已准备好：
 
-Railway 的免费计划支持 Node/Docker 服务，并允许给服务挂载一个持久卷。这个项目已经包含 `Dockerfile` 和 `railway.json`。
+- `Dockerfile`
+- `.dockerignore`
+- `railway.json`（Railway 备用）
+- 本地 Git 仓库与首次提交
+- 管理后台、登录、邀请与昵称/密码功能
 
-### 1. 创建账号
+## 为什么选 Northflank
 
-打开 <https://railway.com> 注册并登录。免费计划有月度用量上限，超出后会暂停服务，但卷上的数据会保留。
+Northflank 的 **Sandbox** 免费额度包含 2 个服务、2 个 Job、1 个数据库和每月最多 $20 的云资源，服务可以常驻不休眠；持久卷按用量从免费额度里扣。对于这个小型 SQLite 应用，成本很低。
 
-### 2. 安装并登录 CLI
+需要你准备：
 
-```bash
-npm install -g @railway/cli
-railway login
-```
+1. 一个 Northflank 账号（无需信用卡即可注册）；
+2. 一个公开的 Git 仓库（GitHub / GitLab 均可），因为 Northflank 从 Git 仓库构建 Dockerfile。
 
-`railway login` 会打开浏览器，需要你本人在浏览器里完成登录授权。
+## 第一步：把代码推到公开 Git 仓库
 
-### 3. 部署项目
-
-在项目目录执行：
+本地已经是提交好的 Git 仓库。请在你的 GitHub 或 GitLab 上新建一个空仓库，然后执行：
 
 ```bash
 cd "/Users/kyyd/Desktop/凑狗厨房"
-railway init
-railway up
+git remote add origin <你的仓库地址>
+git push -u origin main
 ```
 
-### 4. 添加持久卷
+`data/`、`.cloudflared/`、`.DS_Store` 已加入 `.gitignore`，不会被上传。
 
-在 Railway 控制台：
+## 第二步：在 Northflank 创建服务
 
-1. 打开刚创建的服务；
-2. **Settings → Volumes**；
-3. 新建一个 Volume，挂载路径填写：
+1. 登录 <https://app.northflank.com>；
+2. 创建 Project；
+3. 创建 **Combined service**；
+4. Repository 选择刚推送的公开仓库，分支 `main`；
+5. Build type 选择 **Dockerfile**；
+6. Dockerfile 路径填 `Dockerfile`，Build context 填 `.`；
+7. 创建服务。
+
+## 第三步：添加持久卷
+
+在服务的 **Volumes** 设置中新增一个卷，挂载路径必须是：
 
 ```text
 /app/data
 ```
 
-这一步非常重要。没有持久卷，SQLite 数据会在重新部署时被清空。
+没有这个卷，SQLite 会在重新部署或容器重建时被清空。
 
-### 5. 配置管理员
+## 第四步：配置环境变量和端口
 
-在服务的 **Variables** 中添加：
+在服务的 **Environment / Variables** 中添加：
 
 ```text
+HOST=0.0.0.0
 ADMIN_USERNAME=你的用户名
 ```
 
-然后部署。第一次用这个用户名注册时，账号会自动获得管理员权限。也可以部署完成后访问网站注册任意账号，再通过 Railway 的命令环境执行：
+> `ADMIN_USERNAME` 是首个管理员引导。用这个用户名注册后，账号会自动成为管理员；如果账号已经存在，服务重启后也会被提升。
 
-```bash
-npm run make-admin -- 用户名
+在 **Networking → Ports** 中添加：
+
+```text
+端口：4174
+协议：HTTP
+公开：开启
 ```
 
-对于没有终端入口的托管环境，建议直接使用 `ADMIN_USERNAME`。
+`PORT` 通常由 Northflank 自动注入；本项目的 `server.js` 会优先使用平台注入的 `PORT`，没有时回退到 `4174`。
 
-### 6. 生成公网域名
+## 第五步：生成公网域名并验证
 
-在服务 **Settings → Networking → Public Networking** 中点击生成域名。
-
-打开域名后：
-
-- 正常注册 / 登录；
-- 访问 `/admin` 登录管理后台；
-- 邀请链接会基于当前公网域名自动生成。
-
-### 7. 验证
+在 **Networking → Public URL** 生成域名，然后打开：
 
 ```text
 https://你的域名/api/health
 ```
 
-应返回：
+应该返回：
 
 ```json
 {"ok":true}
 ```
 
-## 备选平台
+注册账号后访问：
 
-### Northflank Sandbox
+```text
+https://你的域名/admin
+```
 
-Northflank 的 Sandbox 免费额度更充足，也支持常驻服务和持久卷，但配置步骤比 Railway 多。服务需要监听 `0.0.0.0` 和平台注入的 `PORT`，本项目已经支持。
+如果该账号的用户名等于 `ADMIN_USERNAME`，它已经是管理员，可以直接登录后台。
 
-### 不推荐：Render 免费 Web Service
+## 用 Northflank CLI 自动部署（可选）
 
-Render 的免费 Web Service **不能挂载持久磁盘**。SQLite 会随容器重启/休眠而丢失，除非额外接入 Turso 等外部数据库。
+如果不想手动点控制台，可以创建 Northflank API Token，然后让 CLI 操作：
 
-### 不推荐：Vercel / Netlify Functions
+1. Northflank → **Account Settings → API → Tokens → Create API token**；
+2. 安装 CLI：
 
-这是长期运行的 Node HTTP 服务，使用 SQLite 和 SSE 实时同步，不适合改成纯 Serverless Function。
+```bash
+npm install -g @northflank/cli
+northflank login
+```
 
-## 临时公网预览
+3. 按 Northflank 文档创建 project、combined service、volume 和 public port。
 
-如果只是想马上让朋友打开看一眼，可以用 Cloudflare Quick Tunnel（无需账号），但：
+如果你希望我通过 CLI 继续代部署，请先把 token 保存到项目目录的 `.northflank-token`（已加入 `.gitignore`），不要把 token 直接发到聊天里。然后我可以读取它继续。
 
-- 地址是随机生成且临时的；
-- 你的 Mac 必须保持开机、服务和隧道都保持运行；
-- 隧道重启后地址会变化；
-- 不适合作为长期正式部署。
+## Railway 备用方案
 
-正式分享建议使用 Railway 持久卷方案。
+项目保留了 `railway.json` 和 Dockerfile。Railway 免费计划同样支持持久卷，在控制台把卷挂载到 `/app/data` 即可。操作步骤与 Northflank 类似：连接 Git 仓库 → Dockerfile 构建 → 加卷 → 设置 `ADMIN_USERNAME` → 生成域名。
 
-## 环境变量
+## 不推荐
 
-| 变量 | 说明 | 默认值 |
+- **Render 免费 Web Service**：免费实例不能挂载持久磁盘，SQLite 会重置。
+- **Vercel / Netlify Functions**：不适合长期运行的 Node 服务、SQLite 和 SSE。
+- **Fly.io**：没有真正的无卡永久免费层。
+
+## 常用环境变量
+
+| 变量 | 说明 | 默认 |
 | --- | --- | --- |
-| `PORT` | 监听端口，平台通常会自动注入 | `4174` |
-| `HOST` | 监听地址 | `127.0.0.1`，Docker 镜像内为 `0.0.0.0` |
-| `ADMIN_USERNAME` | 该用户名注册/启动时自动成为管理员 | 空 |
+| `PORT` | 监听端口，平台通常自动注入 | `4174` |
+| `HOST` | 监听地址 | `127.0.0.1`；Dockerfile 内为 `0.0.0.0` |
+| `ADMIN_USERNAME` | 指定用户注册/启动时自动成为管理员 | 空 |
 
 ## 数据备份
 
-本地开发时：
+本地：
 
 ```bash
 sqlite3 data/cougou.sqlite ".backup 'data/cougou-backup.sqlite'"
 ```
 
-托管环境优先使用平台的 Volume 快照/备份功能。备份前最好停止写入，或使用 SQLite 的 `.backup` 命令获取一致性快照。
+托管环境建议定期使用 Northflank 的 Volume 快照/备份能力。

@@ -84,13 +84,15 @@ HOST=0.0.0.0 PORT=4174 npm start
 
 ### 部署
 
-项目已经包含 `Dockerfile`、`railway.json` 和详细的 [DEPLOY.md](DEPLOY.md)。推荐使用带持久卷的 Railway 免费计划；Render 免费 Web Service 没有持久磁盘，SQLite 会在重启后丢失。
+项目已经包含 `Dockerfile`、`railway.json`、本地 Git 仓库和详细的 [DEPLOY.md](DEPLOY.md)。当前选择部署到带持久卷的 **Northflank Sandbox 免费计划**。
 
 部署时必须：
 
 1. 设置 `HOST=0.0.0.0`（Docker 镜像已内置）；
 2. 给服务挂载持久卷到 `/app/data`；
 3. 设置 `ADMIN_USERNAME=你的用户名`，让首个管理员自动生效。
+
+Northflank 需要你准备一个账号和一个公开 Git 仓库；代码已初始化并提交到本地 `main` 分支，参考 [DEPLOY.md](DEPLOY.md) 推送后即可创建服务。
 
 ### 管理员设置
 
@@ -145,7 +147,7 @@ ADMIN_USERNAME=用户名 npm start
 ├── package.json
 ├── Dockerfile              # 容器部署
 ├── railway.json            # Railway 部署配置
-├── DEPLOY.md               # 免费平台部署指南
+├── DEPLOY.md               # Northflank / Railway 部署指南
 ├── 启动厨房.command        # macOS 双击启动器
 ├── README.md
 ├── preview-auth.png
