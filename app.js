@@ -565,7 +565,11 @@
     hideAuthError();
     setAuthMode(state.authMode === "register" ? "register" : "login");
     renderAuthInviteBanner();
-    requestAnimationFrame(() => dom.authUsername.focus({ preventScroll: true }));
+    // Do not pop the mobile keyboard before the user taps a field.
+    requestAnimationFrame(() => {
+      if (window.matchMedia("(max-width: 760px)").matches) return;
+      dom.authUsername.focus({ preventScroll: true });
+    });
   }
 
   async function logout() {
