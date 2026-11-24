@@ -124,7 +124,7 @@ npm start</code></pre>
           <div class="auth-story-foot">
             <ul class="auth-points">
               <li><span>01</span><div><strong>自己的厨房</strong><p>一周食谱、每日热量、食材预设，都装进这里。</p></div></li>
-              <li><span>02</span><div><strong>一起建设</strong><p>邀请朋友成为共建者，或只来观看，也可以随时收回。</p></div></li>
+              <li><span>02</span><div><strong>一起建设</strong><p>邀请朋友成为小狗，或成为访客，也可以随时收回。</p></div></li>
               <li><span>03</span><div><strong>实时同步</strong><p>朋友那边添了一道菜，你这里也能马上看见。</p></div></li>
             </ul>
             <div class="auth-mini-preview" aria-hidden="true">
@@ -381,7 +381,7 @@ npm start</code></pre>
 
           <div class="readonly-banner" id="readonlyBanner" hidden>
             <svg class="icon" aria-hidden="true"><use href="#icon-eye"></use></svg>
-            <p>你正在以「观看者」身份浏览这间厨房。可以看食谱和食材库，编辑需要厨房主人邀请你成为共建者。</p>
+            <p>你正在以「访客」身份浏览这间厨房。可以看食谱和食材库，编辑需要厨房主人邀请你成为小狗。</p>
             <button id="readonlyManage" type="button">查看成员</button>
           </div>
 
@@ -728,15 +728,15 @@ npm start</code></pre>
           <aside class="invite-card" id="inviteCard">
             <p class="card-kicker">INVITE FRIENDS</p>
             <h3>邀请朋友来厨房</h3>
-            <p class="invite-copy">给他们一个身份：一起添菜，或只是看看这周吃什么。</p>
+            <p class="invite-copy">给他们一个身份：成为小狗一起添菜，或成为访客看看这周吃什么。</p>
             <div class="invite-role-options">
               <label class="invite-role">
                 <input type="radio" name="inviteRole" value="editor" checked>
-                <span><strong>一起编辑</strong><small>可以添加食谱、管理食材</small></span>
+                <span><strong>小狗</strong><small>可以一起编辑食谱、管理食材</small></span>
               </label>
               <label class="invite-role">
                 <input type="radio" name="inviteRole" value="viewer">
-                <span><strong>只能观看</strong><small>可以查看，不能修改</small></span>
+                <span><strong>访客</strong><small>可以查看和参与，不能修改</small></span>
               </label>
             </div>
             <button class="button button-primary invite-button" id="createInviteButton" type="button">
@@ -755,7 +755,7 @@ npm start</code></pre>
             </div>
             <div class="invite-owner-note" id="inviteOwnerNote" hidden>
               <svg class="icon" aria-hidden="true"><use href="#icon-lock"></use></svg>
-              <p>邀请朋友和管理成员是厨房主人的权限。你现在是<span id="inviteOwnerRole">共建者</span>。</p>
+              <p>邀请朋友和管理成员是厨房主人的权限。你现在是<span id="inviteOwnerRole">小狗</span>。</p>
             </div>
             <div class="active-invites" id="activeInvites"></div>
           </aside>
@@ -782,11 +782,11 @@ npm start</code></pre>
             </div>
             <div class="role-guide-row">
               <span class="role-guide-icon editor"><svg class="icon" aria-hidden="true"><use href="#icon-pencil"></use></svg></span>
-              <div><strong>共建者</strong><p>可以安排食谱、管理食材、调整每日目标。</p></div>
+              <div><strong>小狗</strong><p>可以安排食谱、管理食材、调整每日目标，也能参与饭局和投票。</p></div>
             </div>
             <div class="role-guide-row">
               <span class="role-guide-icon viewer"><svg class="icon" aria-hidden="true"><use href="#icon-eye"></use></svg></span>
-              <div><strong>观看者</strong><p>可以安静地看这份周食谱和食材库，不会误改。</p></div>
+              <div><strong>访客</strong><p>可以查看周食谱和食材库，参与投票和留言，但不会误改。</p></div>
             </div>
           </aside>
         </div>

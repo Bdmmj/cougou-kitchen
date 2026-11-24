@@ -90,7 +90,7 @@
   }
 
   function inviteRoleLabel(role) {
-    return role === "editor" ? "一起编辑" : "只能观看";
+    return role === "editor" ? "小狗" : "访客";
   }
 
   function inviteStatus(invite) {
@@ -656,7 +656,7 @@
                     (member) => `
                       <div class="admin-detail-row">
                         <span>${escapeHtml(member.displayName)} · @${escapeHtml(member.username)}</span>
-                        <span>${escapeHtml(member.role === "owner" ? "主人" : member.role === "editor" ? "共建者" : "观看者")}</span>
+                        <span>${escapeHtml(member.role === "owner" ? "主人" : member.role === "editor" ? "小狗" : "访客")}</span>
                       </div>
                     `,
                   )

@@ -509,7 +509,7 @@ async function requireMembership(env, kitchenId, userId, { edit = false, owner =
   const kitchen = await getKitchenSummary(env, kitchenId, userId);
   if (!kitchen) throw new HttpError(404, "厨房不存在，或你还不是这个厨房的成员。");
   if (owner && kitchen.role !== "owner") throw new HttpError(403, "只有厨房主人可以执行这个操作。");
-  if (edit && kitchen.role === "viewer") throw new HttpError(403, "你是观看者，暂时不能修改这个厨房。");
+  if (edit && kitchen.role === "viewer") throw new HttpError(403, "你是访客，暂时不能修改这个厨房。");
   return kitchen;
 }
 
@@ -1304,7 +1304,7 @@ async function handleUpdateGrocery(request, env, user, kitchenId, groceryId) {
   const onlyDone = keys.length === 1 && keys[0] === "done";
   const canToggleOwn = onlyDone && duty.user_id === user.id;
   if (kitchen.role === "viewer" && !canToggleOwn) {
-    throw new HttpError(403, "你是观看者，只能更新自己负责的买菜进度。");
+    throw new HttpError(403, "你是访客，只能更新自己负责的买菜进度。");
   }
   let userId = duty.user_id;
   if (Object.prototype.hasOwnProperty.call(body, "userId")) {
@@ -1607,7 +1607,7 @@ async function handleUpdateKitchen(request, env, user, kitchenId) {
   if (!hasName && !hasTarget) throw new HttpError(400, "没有需要更新的内容。");
   const kitchen = await requireMembership(env, kitchenId, user.id);
   if (hasName && kitchen.role !== "owner") throw new HttpError(403, "只有厨房主人可以重命名厨房。");
-  if (hasTarget && kitchen.role === "viewer") throw new HttpError(403, "你是观看者，不能修改每日目标。");
+  if (hasTarget && kitchen.role === "viewer") throw new HttpError(403, "你是访客，不能修改每日目标。");
 
   let name = null;
   let target = null;

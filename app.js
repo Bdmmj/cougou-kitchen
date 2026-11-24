@@ -22,8 +22,8 @@
   const TARGET_MIN = 500;
   const TARGET_MAX = 6000;
   const FOOD_MAX = 5000;
-  const ROLE_LABELS = { owner: "主人", editor: "共建者", viewer: "观看者" };
-  const ROLE_INVITE_LABELS = { editor: "一起编辑", viewer: "只能观看" };
+  const ROLE_LABELS = { owner: "主人", editor: "小狗", viewer: "访客" };
+  const ROLE_INVITE_LABELS = { editor: "小狗", viewer: "访客" };
   const CATEGORY_META = {
     staple: { label: "主食", color: "var(--cat-staple)" },
     protein: { label: "蛋白质", color: "var(--cat-protein)" },
@@ -450,7 +450,7 @@
     if (state.invitePreview) {
       const invite = state.invitePreview;
       dom.authInviteTitle.textContent = `${invite.inviterName} 邀请你加入「${invite.kitchenName}」`;
-      dom.authInviteText.textContent = `加入后身份：${ROLE_INVITE_LABELS[invite.role] || "观看者"}。登录或创建账号后会自动加入。`;
+      dom.authInviteText.textContent = `加入后身份：${ROLE_INVITE_LABELS[invite.role] || "访客"}。登录或创建账号后会自动加入。`;
     } else if (state.inviteError) {
       dom.authInviteTitle.textContent = "这份邀请暂时不可用";
       dom.authInviteText.textContent = state.inviteError;
@@ -1043,7 +1043,7 @@
 
     dom.targetCurrent.textContent = formatTarget(getTarget());
     dom.targetButton.disabled = !canEdit();
-    dom.targetButton.title = canEdit() ? "修改每日目标" : "只有共建者和主人可以修改目标";
+    dom.targetButton.title = canEdit() ? "修改每日目标" : "只有小狗和主人可以修改目标";
 
     dom.readonlyBanner.hidden = canEdit();
     dom.clearWeek.hidden = !canEdit();
@@ -1054,12 +1054,12 @@
     if (canEdit()) {
       dom.plannerSub.innerHTML = '点任意食物编辑，按每餐的 <span>＋</span> 添加新食物。';
     } else {
-      dom.plannerSub.textContent = "这是共享的周食谱，只有主人和共建者可以编辑。";
+      dom.plannerSub.textContent = "这是共享的周食谱，只有主人和小狗可以编辑。";
     }
     dom.emptyAddIngredient.hidden = !canEdit();
     dom.ingredientRoleNote.textContent = canEdit()
       ? "食材库由厨房成员共享"
-      : "你以观看者身份查看这间厨房的食材库";
+      : "你以访客身份查看这间厨房的食材库";
 
     renderKitchenMenu();
     selectNav(state.view);
@@ -2871,7 +2871,7 @@
       dom.inviteOwnerNote.hidden = true;
     } else {
       inviteHeading.textContent = "邀请由主人发起";
-      inviteCopy.textContent = "这间厨房的邀请和管理由主人负责。你可以安心查看，或请主人把你升级为共建者。";
+      inviteCopy.textContent = "这间厨房的邀请和管理由主人负责。你可以安心查看，或请主人把你升级为小狗。";
       roleOptions.hidden = true;
       dom.createInviteButton.hidden = true;
       dom.inviteResult.hidden = true;
@@ -2881,7 +2881,7 @@
     if (owner && state.generatedInviteLink) {
       dom.inviteResult.hidden = false;
       dom.inviteLink.value = state.generatedInviteLink;
-      dom.inviteHint.textContent = `身份：${ROLE_INVITE_LABELS[state.generatedInviteRole] || "观看者"} · 7 天内有效，可邀请多位朋友。`;
+      dom.inviteHint.textContent = `身份：${ROLE_INVITE_LABELS[state.generatedInviteRole] || "访客"} · 7 天内有效，可邀请多位朋友。`;
     } else if (owner) {
       dom.inviteResult.hidden = true;
     }
@@ -3004,7 +3004,7 @@
         (invite) => `
           <div class="active-invite" data-invite-id="${escapeHtml(invite.id)}">
             <div class="active-invite-copy">
-              <strong>${ROLE_INVITE_LABELS[invite.role] || "观看者"}</strong>
+              <strong>${ROLE_INVITE_LABELS[invite.role] || "访客"}</strong>
               <span>${formatExpiry(invite.expiresAt)}</span>
             </div>
             <div class="active-invite-actions">
@@ -3026,8 +3026,8 @@
           owner && !isMemberOwner
             ? `<div class="member-actions">
                  <select class="member-role-select" data-member-role="${escapeHtml(member.id)}" aria-label="修改${escapeHtml(member.displayName)}的身份">
-                   <option value="editor"${member.role === "editor" ? " selected" : ""}>共建者</option>
-                   <option value="viewer"${member.role === "viewer" ? " selected" : ""}>观看者</option>
+                   <option value="editor"${member.role === "editor" ? " selected" : ""}>小狗</option>
+                   <option value="viewer"${member.role === "viewer" ? " selected" : ""}>访客</option>
                  </select>
                  <button class="member-remove" type="button" data-remove-member="${escapeHtml(member.id)}" data-member-name="${escapeHtml(member.displayName)}" aria-label="移除${escapeHtml(member.displayName)}">
                    <svg class="icon" aria-hidden="true"><use href="#icon-trash"></use></svg>
@@ -3670,7 +3670,7 @@
 
   function openTargetModal() {
     if (!canEdit()) {
-      showToast("只有共建者和主人可以修改每日目标。");
+      showToast("只有小狗和主人可以修改每日目标。");
       return;
     }
     dom.targetInput.value = String(getTarget());
