@@ -49,6 +49,11 @@ npx wrangler pages deploy public --project-name cougou-kitchen --branch main
 npx wrangler d1 execute cougou-kitchen --remote --file=schema.sql
 ```
 
+> 模板、收藏、掌勺、用餐投票和买菜安排新增了 `week_templates`、`meal_favorites`、
+> `day_cooks`、`meal_polls`、`poll_options`、`poll_votes`、`grocery_duties` 等表。
+> 更新这一版代码前必须先执行上面的 D1 schema 更新，否则食谱接口会因为缺少
+> `day_cooks` 表而报错。
+
 ## 说明
 
 - 线上数据库是独立的 D1，本地 `data/cougou.sqlite` 不会自动同步。

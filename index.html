@@ -57,6 +57,11 @@
     <symbol id="icon-key" viewBox="0 0 24 24"><circle cx="8" cy="15.5" r="4.5"/><path d="m11.2 12.3 8.3-8.3M16 6l2.5 2.5M13.5 8.5 16 11"/></symbol>
     <symbol id="icon-lock" viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8.5 10V7.5a3.5 3.5 0 1 1 7 0V10M12 14v2"/></symbol>
     <symbol id="icon-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21h-4v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3v-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3 1.7 1.7 0 0 0 1-1.5V3h4v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.5 1h.1v4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></symbol>
+    <symbol id="icon-chef" viewBox="0 0 24 24"><path d="M7.2 12.3A4.1 4.1 0 0 1 6.5 4.2 4.3 4.3 0 0 1 12 2.8a4.3 4.3 0 0 1 5.5 1.4 4.1 4.1 0 0 1-.7 8.1V20H7.2v-7.7Z"/><path d="M7.2 16.3h9.6"/></symbol>
+    <symbol id="icon-vote" viewBox="0 0 24 24"><rect x="3.5" y="4" width="17" height="16" rx="3"/><path d="m8 11.5 2.6 2.6 5.4-5.6"/></symbol>
+    <symbol id="icon-basket" viewBox="0 0 24 24"><path d="M3.5 10h17l-1.6 9.5H5.1L3.5 10Z"/><path d="m7.8 10 4.2-6.5 4.2 6.5M9.2 14v2.2M14.8 14v2.2"/></symbol>
+    <symbol id="icon-star" viewBox="0 0 24 24"><path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1-5.4-2.9-5.4 2.9 1-6.1-4.4-4.3 6.1-.9L12 3Z"/></symbol>
+    <symbol id="icon-bookmark" viewBox="0 0 24 24"><path d="M6 3.5h12v17l-6-4.2-6 4.2v-17Z"/></symbol>
   </svg>
 
   <div class="page-grain" aria-hidden="true"></div>
@@ -221,13 +226,13 @@ npm start</code></pre>
             <svg class="icon" aria-hidden="true"><use href="#icon-pantry"></use></svg>
             <span>食材库</span>
           </button>
+          <button class="nav-item" type="button" data-view="table">
+            <svg class="icon" aria-hidden="true"><use href="#icon-chef"></use></svg>
+            <span>饭局</span>
+          </button>
           <button class="nav-item" type="button" data-view="wellness">
             <svg class="icon" aria-hidden="true"><use href="#icon-moon"></use></svg>
             <span>健康</span>
-          </button>
-          <button class="nav-item" type="button" data-view="messages">
-            <svg class="icon" aria-hidden="true"><use href="#icon-message"></use></svg>
-            <span>留言板</span>
           </button>
           <button class="nav-item" type="button" data-view="kitchen">
             <svg class="icon" aria-hidden="true"><use href="#icon-users"></use></svg>
@@ -362,6 +367,18 @@ npm start</code></pre>
             </div>
           </div>
 
+          <div class="planner-tools" id="plannerTools" hidden>
+            <button class="tool-chip" id="copyLastWeek" type="button">
+              <svg class="icon" aria-hidden="true"><use href="#icon-copy"></use></svg>
+              复制上周食谱
+            </button>
+            <button class="tool-chip" id="openRecipeTools" type="button">
+              <svg class="icon" aria-hidden="true"><use href="#icon-bookmark"></use></svg>
+              模板与收藏
+            </button>
+            <span class="planner-tools-hint">把上周的安排搬过来，或存成模板下次再用。</span>
+          </div>
+
           <div class="readonly-banner" id="readonlyBanner" hidden>
             <svg class="icon" aria-hidden="true"><use href="#icon-eye"></use></svg>
             <p>你正在以「观看者」身份浏览这间厨房。可以看食谱和食材库，编辑需要厨房主人邀请你成为共建者。</p>
@@ -452,6 +469,111 @@ npm start</code></pre>
         <p class="library-note"><svg class="icon" aria-hidden="true"><use href="#icon-users"></use></svg>食材预设属于当前厨房，修改后会同步给所有成员；已加入食谱的食物不会自动改价。</p>
       </section>
 
+      <!-- ============ Table: cooks, votes & groceries ============ -->
+      <section class="view shell" id="tableView" aria-labelledby="tableTitle" hidden>
+        <header class="view-head">
+          <div class="view-heading">
+            <p class="eyebrow"><span class="eyebrow-dash"></span>TABLE DUTIES &amp; VOTES</p>
+            <h1 id="tableTitle">饭局<span class="title-dot">.</span></h1>
+            <p class="view-lede">谁掌勺、周末吃什么、谁去买菜，还有想说的话——都放进同一张饭桌。</p>
+          </div>
+          <div class="view-head-actions">
+            <button class="button button-quiet" id="tableStartPoll" type="button">
+              <svg class="icon" aria-hidden="true"><use href="#icon-vote"></use></svg>
+              发起投票
+            </button>
+            <button class="button button-primary" id="tableAddGrocery" type="button">
+              <svg class="icon" aria-hidden="true"><use href="#icon-basket"></use></svg>
+              记录买菜
+            </button>
+          </div>
+        </header>
+
+        <section class="table-card roster-card">
+          <div class="card-heading">
+            <div>
+              <p class="card-kicker">WHO'S COOKING</p>
+              <h2>本周掌勺</h2>
+            </div>
+            <div class="roster-week-nav" aria-label="切换周份">
+              <button class="roster-week-button" id="tablePrevWeek" type="button" aria-label="查看上一周">
+                <svg class="icon" aria-hidden="true"><use href="#icon-chevron-left"></use></svg>
+              </button>
+              <span id="tableWeekLabel">—</span>
+              <button class="roster-week-button" id="tableNextWeek" type="button" aria-label="查看下一周">
+                <svg class="icon" aria-hidden="true"><use href="#icon-chevron-right"></use></svg>
+              </button>
+            </div>
+          </div>
+          <p class="table-card-copy">点任意一天，给这一天指定掌勺的人。厨房成员都会在食谱里看到安排。</p>
+          <div class="roster-grid" id="cookRoster"></div>
+        </section>
+
+        <div class="table-two-col">
+          <section class="table-card polls-card">
+            <div class="card-heading">
+              <div>
+                <p class="card-kicker">MEAL VOTE</p>
+                <h2>用餐投票</h2>
+              </div>
+              <span class="count-chip" id="pollCount">0 个进行中</span>
+            </div>
+            <p class="table-card-copy">例如「周末吃什么」。每人一票，可以随时改主意，结束后保留结果。</p>
+            <div class="poll-list" id="pollList"></div>
+            <div class="table-empty" id="pollEmpty" hidden>
+              <span class="table-empty-icon" aria-hidden="true"><svg class="icon"><use href="#icon-vote"></use></svg></span>
+              <strong>还没有投票</strong>
+              <p>周末前发起一个，让大家一起决定吃什么。</p>
+              <button class="button button-primary" id="pollEmptyAction" type="button">发起第一个投票</button>
+            </div>
+          </section>
+
+          <section class="table-card grocery-card">
+            <div class="card-heading">
+              <div>
+                <p class="card-kicker">GROCERY DUTY</p>
+                <h2>本周买菜</h2>
+              </div>
+              <span class="count-chip" id="groceryCount">0 项</span>
+            </div>
+            <p class="table-card-copy">记下谁去买菜、哪天去、要带什么。买完可以勾掉。</p>
+            <div class="grocery-list" id="groceryList"></div>
+            <div class="table-empty" id="groceryEmpty" hidden>
+              <span class="table-empty-icon" aria-hidden="true"><svg class="icon"><use href="#icon-basket"></use></svg></span>
+              <strong>还没有买菜安排</strong>
+              <p>如果这周要一起采购，把负责人记下来吧。</p>
+              <button class="button button-primary" id="groceryEmptyAction" type="button">记录买菜负责人</button>
+            </div>
+          </section>
+        </div>
+
+        <section class="table-card table-messages" aria-labelledby="messagesTitle">
+          <div class="card-heading">
+            <div>
+              <p class="card-kicker">KITCHEN NOTES</p>
+              <h2 id="messagesTitle">留言板</h2>
+            </div>
+            <div class="table-messages-meta">
+              <span class="count-chip" id="messageCountLabel">0 条留言</span>
+              <span class="wellness-private">仅厨房成员可见</span>
+            </div>
+          </div>
+          <p class="table-card-copy">给同一间厨房的人留个话，分享今天的安排，或只是说一句晚安。</p>
+          <form class="message-form" id="messageForm">
+            <label class="visually-hidden" for="messageInput">留言内容</label>
+            <textarea id="messageInput" maxlength="500" placeholder="给厨房里的朋友留个话…" aria-describedby="messageLength"></textarea>
+            <div class="message-form-foot">
+              <span class="message-length" id="messageLength">0 / 500</span>
+              <button class="button button-primary message-submit" id="messageSubmit" type="submit">
+                <svg class="icon" aria-hidden="true"><use href="#icon-arrow-right"></use></svg>
+                张贴留言
+              </button>
+            </div>
+          </form>
+          <div class="message-list" id="messageList"></div>
+        </section>
+      </section>
+
       <!-- ============ Wellness ============ -->
       <section class="view shell" id="wellnessView" aria-labelledby="wellnessTitle" hidden>
         <header class="view-head">
@@ -536,36 +658,6 @@ npm start</code></pre>
             <span class="member-hint">睡眠与运动均为个人记录</span>
           </div>
           <div class="wellness-summary" id="wellnessSummary"></div>
-        </section>
-      </section>
-
-      <!-- ============ Message board ============ -->
-      <section class="view shell" id="messagesView" aria-labelledby="messagesTitle" hidden>
-        <header class="view-head">
-          <div class="view-heading">
-            <p class="eyebrow"><span class="eyebrow-dash"></span>KITCHEN NOTES</p>
-            <h1 id="messagesTitle">留言板<span class="title-dot">.</span></h1>
-            <p class="view-lede">给同一间厨房的人留个话，分享今天的安排，或只是说一句晚安。</p>
-          </div>
-          <div class="view-head-actions">
-            <span class="count-chip" id="messageCountLabel">0 条留言</span>
-            <span class="wellness-private">仅厨房成员可见</span>
-          </div>
-        </header>
-
-        <section class="message-board-card">
-          <form class="message-form" id="messageForm">
-            <label class="visually-hidden" for="messageInput">留言内容</label>
-            <textarea id="messageInput" maxlength="500" placeholder="给厨房里的朋友留个话…" aria-describedby="messageLength"></textarea>
-            <div class="message-form-foot">
-              <span class="message-length" id="messageLength">0 / 500</span>
-              <button class="button button-primary message-submit" id="messageSubmit" type="submit">
-                <svg class="icon" aria-hidden="true"><use href="#icon-arrow-right"></use></svg>
-                张贴留言
-              </button>
-            </div>
-          </form>
-          <div class="message-list" id="messageList"></div>
         </section>
       </section>
 
@@ -728,13 +820,13 @@ npm start</code></pre>
         <svg class="icon" aria-hidden="true"><use href="#icon-pantry"></use></svg>
         <span>食材库</span>
       </button>
+      <button class="mobile-tab" type="button" data-view="table">
+        <svg class="icon" aria-hidden="true"><use href="#icon-chef"></use></svg>
+        <span>饭局</span>
+      </button>
       <button class="mobile-tab" type="button" data-view="wellness">
         <svg class="icon" aria-hidden="true"><use href="#icon-moon"></use></svg>
         <span>健康</span>
-      </button>
-      <button class="mobile-tab" type="button" data-view="messages">
-        <svg class="icon" aria-hidden="true"><use href="#icon-message"></use></svg>
-        <span>留言</span>
       </button>
       <button class="mobile-tab" type="button" data-view="kitchen">
         <svg class="icon" aria-hidden="true"><use href="#icon-users"></use></svg>
@@ -1147,6 +1239,253 @@ npm start</code></pre>
           <span class="actions-spacer"></span>
           <button class="button button-quiet" type="button" data-close-rename-kitchen>取消</button>
           <button class="button button-primary" type="submit">保存名字</button>
+        </div>
+      </form>
+    </section>
+  </div>
+
+  <div class="modal-layer" id="cookModal" hidden>
+    <div class="modal-scrim" data-close-cook></div>
+    <section class="modal modal-small" role="dialog" aria-modal="true" aria-labelledby="cookModalTitle" tabindex="-1">
+      <div class="modal-head">
+        <div>
+          <p class="modal-kicker">WHO'S COOKING</p>
+          <h2 id="cookModalTitle">今天谁做饭？</h2>
+        </div>
+        <button class="modal-close" type="button" data-close-cook aria-label="关闭">
+          <svg class="icon" aria-hidden="true"><use href="#icon-close"></use></svg>
+        </button>
+      </div>
+      <p class="modal-copy" id="cookModalCopy">选一位厨房成员来掌勺，安排会同步给所有人。</p>
+      <div class="cook-choice-list" id="cookChoiceList" role="radiogroup" aria-label="选择掌勺的人"></div>
+      <p class="form-error" id="cookError" role="alert" hidden></p>
+      <div class="modal-actions">
+        <button class="delete-button" id="cookClear" type="button" hidden>清除安排</button>
+        <button class="text-button" id="cookClaim" type="button">我来做</button>
+        <span class="actions-spacer"></span>
+        <button class="button button-quiet" type="button" data-close-cook>取消</button>
+        <button class="button button-primary" id="cookSave" type="button">保存</button>
+      </div>
+    </section>
+  </div>
+
+  <div class="modal-layer" id="recipeToolsModal" hidden>
+    <div class="modal-scrim" data-close-recipe-tools></div>
+    <section class="modal recipe-tools-modal" role="dialog" aria-modal="true" aria-labelledby="recipeToolsTitle" tabindex="-1">
+      <div class="modal-head">
+        <div>
+          <p class="modal-kicker">RECIPE TOOLS</p>
+          <h2 id="recipeToolsTitle">模板与收藏</h2>
+        </div>
+        <button class="modal-close" type="button" data-close-recipe-tools aria-label="关闭">
+          <svg class="icon" aria-hidden="true"><use href="#icon-close"></use></svg>
+        </button>
+      </div>
+
+      <div class="recipe-tabs" role="tablist" aria-label="模板与收藏">
+        <button class="recipe-tab is-active" id="recipeTabTemplates" type="button" role="tab" aria-selected="true" aria-controls="recipePanelTemplates" data-recipe-tab="templates">一周模板</button>
+        <button class="recipe-tab" id="recipeTabFavorites" type="button" role="tab" aria-selected="false" aria-controls="recipePanelFavorites" data-recipe-tab="favorites">常做的一餐</button>
+      </div>
+
+      <div class="recipe-panel" id="recipePanelTemplates" role="tabpanel" aria-labelledby="recipeTabTemplates">
+        <div class="template-save-row">
+          <input class="text-input" id="templateNameInput" type="text" maxlength="30" placeholder="给这一周起个名字，例如：清爽工作日" autocomplete="off" aria-label="模板名称">
+          <button class="button button-primary" id="saveWeekTemplate" type="button">保存本周</button>
+        </div>
+        <p class="field-hint" id="templateSaveHint">把本周 7 天的安排存成模板，之后可以一键套用到任意一周。</p>
+        <div class="template-list" id="templateList"></div>
+        <div class="recipe-empty" id="templateEmpty" hidden>
+          <span class="recipe-empty-icon" aria-hidden="true"><svg class="icon"><use href="#icon-bookmark"></use></svg></span>
+          <strong>还没有周模板</strong>
+          <p>先给这一周起个名字存下来，下次换周就能直接套用。</p>
+        </div>
+      </div>
+
+      <div class="recipe-panel" id="recipePanelFavorites" role="tabpanel" aria-labelledby="recipeTabFavorites" hidden>
+        <p class="field-hint">在食谱里点某一餐右上角的星标，就能把整餐收藏到这里，下次一键加进某一天。</p>
+        <div class="favorite-list" id="favoriteList"></div>
+        <div class="recipe-empty" id="favoriteEmpty" hidden>
+          <span class="recipe-empty-icon" aria-hidden="true"><svg class="icon"><use href="#icon-star"></use></svg></span>
+          <strong>还没有收藏</strong>
+          <p>把常做的一餐收起来，忙的时候直接加入本周。</p>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div class="modal-layer" id="favoriteModal" hidden>
+    <div class="modal-scrim" data-close-favorite></div>
+    <section class="modal modal-small" role="dialog" aria-modal="true" aria-labelledby="favoriteModalTitle" tabindex="-1">
+      <div class="modal-head">
+        <div>
+          <p class="modal-kicker">SAVE A MEAL</p>
+          <h2 id="favoriteModalTitle">收藏这一餐</h2>
+        </div>
+        <button class="modal-close" type="button" data-close-favorite aria-label="关闭">
+          <svg class="icon" aria-hidden="true"><use href="#icon-close"></use></svg>
+        </button>
+      </div>
+      <p class="modal-copy" id="favoriteModalCopy">把这一餐存进厨房收藏，下次直接加进任意一天。</p>
+      <div class="favorite-preview" id="favoritePreview"></div>
+      <div class="form-group">
+        <label for="favoriteName">给它起个名字</label>
+        <input class="text-input" id="favoriteName" type="text" maxlength="30" autocomplete="off" placeholder="例如：番茄牛腩饭套餐" aria-describedby="favoriteError">
+      </div>
+      <p class="form-error" id="favoriteError" role="alert" hidden></p>
+      <div class="modal-actions">
+        <span class="actions-spacer"></span>
+        <button class="button button-quiet" type="button" data-close-favorite>取消</button>
+        <button class="button button-primary" id="favoriteSave" type="button">收藏这一餐</button>
+      </div>
+    </section>
+  </div>
+
+  <div class="modal-layer" id="favoriteApplyModal" hidden>
+    <div class="modal-scrim" data-close-favorite-apply></div>
+    <section class="modal modal-small" role="dialog" aria-modal="true" aria-labelledby="favoriteApplyTitle" tabindex="-1">
+      <div class="modal-head">
+        <div>
+          <p class="modal-kicker">ADD A FAVORITE</p>
+          <h2 id="favoriteApplyTitle">加入食谱</h2>
+        </div>
+        <button class="modal-close" type="button" data-close-favorite-apply aria-label="关闭">
+          <svg class="icon" aria-hidden="true"><use href="#icon-close"></use></svg>
+        </button>
+      </div>
+      <div class="favorite-preview" id="favoriteApplyPreview"></div>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="favoriteApplyDay">加到哪一天</label>
+          <select class="select-input" id="favoriteApplyDay"></select>
+        </div>
+        <div class="form-group">
+          <label for="favoriteApplyMeal">哪一餐</label>
+          <select class="select-input" id="favoriteApplyMeal">
+            <option value="breakfast">早餐</option>
+            <option value="lunch">午餐</option>
+            <option value="dinner">晚餐</option>
+            <option value="snack">加餐</option>
+          </select>
+        </div>
+      </div>
+      <p class="form-error" id="favoriteApplyError" role="alert" hidden></p>
+      <div class="modal-actions">
+        <span class="actions-spacer"></span>
+        <button class="button button-quiet" type="button" data-close-favorite-apply>取消</button>
+        <button class="button button-primary" id="favoriteApplySave" type="button">加入这一餐</button>
+      </div>
+    </section>
+  </div>
+
+  <div class="modal-layer" id="templateApplyModal" hidden>
+    <div class="modal-scrim" data-close-template-apply></div>
+    <section class="modal modal-small" role="dialog" aria-modal="true" aria-labelledby="templateApplyTitle" tabindex="-1">
+      <div class="modal-head">
+        <div>
+          <p class="modal-kicker">APPLY A TEMPLATE</p>
+          <h2 id="templateApplyTitle">套用周模板</h2>
+        </div>
+        <button class="modal-close" type="button" data-close-template-apply aria-label="关闭">
+          <svg class="icon" aria-hidden="true"><use href="#icon-close"></use></svg>
+        </button>
+      </div>
+      <div class="template-apply-summary" id="templateApplySummary"></div>
+      <fieldset class="form-group">
+        <legend>如何套用到本周</legend>
+        <div class="mode-options">
+          <label class="mode-option">
+            <input type="radio" name="templateMode" value="replace" checked>
+            <span><strong>替换本周</strong><small>先清空本周，再套用模板</small></span>
+          </label>
+          <label class="mode-option">
+            <input type="radio" name="templateMode" value="merge">
+            <span><strong>追加到本周</strong><small>保留已有安排，把模板加在后面</small></span>
+          </label>
+        </div>
+      </fieldset>
+      <p class="form-error" id="templateApplyError" role="alert" hidden></p>
+      <div class="modal-actions">
+        <span class="actions-spacer"></span>
+        <button class="button button-quiet" type="button" data-close-template-apply>取消</button>
+        <button class="button button-primary" id="templateApplyConfirm" type="button">套用到本周</button>
+      </div>
+    </section>
+  </div>
+
+  <div class="modal-layer" id="pollModal" hidden>
+    <div class="modal-scrim" data-close-poll></div>
+    <section class="modal" role="dialog" aria-modal="true" aria-labelledby="pollModalTitle" tabindex="-1">
+      <div class="modal-head">
+        <div>
+          <p class="modal-kicker">START A VOTE</p>
+          <h2 id="pollModalTitle">发起用餐投票</h2>
+        </div>
+        <button class="modal-close" type="button" data-close-poll aria-label="关闭">
+          <svg class="icon" aria-hidden="true"><use href="#icon-close"></use></svg>
+        </button>
+      </div>
+      <p class="modal-copy">问问厨房里的大家想吃什么。每人一票，结果实时更新。</p>
+      <form id="pollForm" novalidate>
+        <div class="form-group">
+          <label for="pollTitle">投票标题</label>
+          <input class="text-input" id="pollTitle" type="text" maxlength="40" placeholder="例如：周末吃什么？" autocomplete="off" aria-describedby="pollError">
+        </div>
+        <div class="form-group">
+          <label for="pollNote">补充说明（可选）</label>
+          <input class="text-input" id="pollNote" type="text" maxlength="120" placeholder="例如：周六晚上，预算人均 100" autocomplete="off">
+        </div>
+        <div class="form-group">
+          <div class="field-label-row">
+            <label for="pollOptions">选项</label>
+            <span>每行一个，2–6 个</span>
+          </div>
+          <textarea class="text-input poll-options-input" id="pollOptions" rows="4" maxlength="300" placeholder="火锅&#10;烤肉&#10;寿司&#10;在家随便做点" aria-describedby="pollError"></textarea>
+        </div>
+        <p class="form-error" id="pollError" role="alert" hidden></p>
+        <div class="modal-actions">
+          <span class="actions-spacer"></span>
+          <button class="button button-quiet" type="button" data-close-poll>取消</button>
+          <button class="button button-primary" type="submit" id="pollSubmit">发起投票</button>
+        </div>
+      </form>
+    </section>
+  </div>
+
+  <div class="modal-layer" id="groceryModal" hidden>
+    <div class="modal-scrim" data-close-grocery></div>
+    <section class="modal modal-small" role="dialog" aria-modal="true" aria-labelledby="groceryModalTitle" tabindex="-1">
+      <div class="modal-head">
+        <div>
+          <p class="modal-kicker">GROCERY DUTY</p>
+          <h2 id="groceryModalTitle">记录谁去买菜</h2>
+        </div>
+        <button class="modal-close" type="button" data-close-grocery aria-label="关闭">
+          <svg class="icon" aria-hidden="true"><use href="#icon-close"></use></svg>
+        </button>
+      </div>
+      <p class="modal-copy">指定这一周的采购负责人，也可以补充哪天去、要买什么。</p>
+      <form id="groceryForm" novalidate>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="groceryMember">谁负责</label>
+            <select class="select-input" id="groceryMember"></select>
+          </div>
+          <div class="form-group">
+            <label for="groceryDay">哪天去</label>
+            <select class="select-input" id="groceryDay">
+              <option value="">不指定</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="groceryNote">要买什么（可选）</label>
+          <input class="text-input" id="groceryNote" type="text" maxlength="60" placeholder="例如：牛奶、鸡蛋、周末的菜" autocomplete="off">
+        </div>
+        <p class="form-error" id="groceryError" role="alert" hidden></p>
+        <div class="modal-actions">
+          <span class="actions-spacer"></span>
+          <button class="button button-quiet" type="button" data-close-grocery>取消</button>
+          <button class="button button-primary" type="submit" id="grocerySubmit">保存安排</button>
         </div>
       </form>
     </section>

@@ -61,6 +61,7 @@
     stream: null,
     loadSequence: 0,
     planSequence: 0,
+    tableSequence: 0,
     loading: false,
     confirmAction: null,
     quickIngredient: null,
@@ -83,6 +84,19 @@
     wellnessDays: null,
     wellnessLoading: false,
     messages: [],
+    table: null,
+    tableWeekStart: null,
+    tableLoading: false,
+    tableError: null,
+    pollVoting: false,
+    templates: [],
+    favorites: [],
+    recipeToolsLoaded: false,
+    recipeTab: "templates",
+    cookDate: null,
+    favoriteSource: null,
+    pendingFavorite: null,
+    pendingTemplate: null,
   };
 
   const dom = {};
@@ -300,7 +314,10 @@
 
   function viewFromHash() {
     const raw = location.hash.replace(/^#\/?/, "").split("?")[0];
-    return ["planner", "ingredients", "wellness", "messages", "kitchen"].includes(raw) ? raw : "planner";
+    if (raw === "messages") return "table";
+    return ["planner", "ingredients", "table", "wellness", "kitchen"].includes(raw)
+      ? raw
+      : "planner";
   }
 
   /* =========================================================
@@ -707,6 +724,9 @@
     if (!location.hash) {
       history.replaceState(null, "", `${location.pathname}#/planner`);
     }
+    if (location.hash === "#/messages") {
+      history.replaceState(null, "", `${location.pathname}#/table`);
+    }
 
     renderChrome();
     setView(viewFromHash(), { updateHash: false });
@@ -749,6 +769,9 @@
       state.messages = detail.messages || [];
       state.plan = plan;
       state.ingredients = ingredientsData.ingredients || [];
+      state.table = null;
+      state.tableWeekStart = null;
+      state.recipeToolsLoaded = false;
       state.generatedInviteLink = null;
       state.generatedInviteRole = null;
       storeActiveKitchen(kitchenId);
@@ -901,7 +924,9 @@
           await refreshPlan({ silent: true });
         } else if (state.view === "ingredients") {
           await refreshIngredients({ silent: true });
-        } else if (state.view === "kitchen" || state.view === "messages") {
+        } else if (state.view === "table") {
+          await loadTable({ silent: true });
+        } else if (state.view === "kitchen") {
           await refreshKitchenDetail();
         }
         if (state.pollTick % 4 === 0) {
@@ -941,6 +966,10 @@
       scheduleRemoteSync("plan");
       return;
     }
+    if (data.type === "table") {
+      scheduleRemoteSync("table");
+      return;
+    }
     if (data.type === "ingredients") {
       scheduleRemoteSync("ingredients");
       return;
@@ -964,6 +993,12 @@
         await refreshPlan({ silent: true });
       } else if (kind === "ingredients") {
         await refreshIngredients({ silent: true });
+      } else if (kind === "table") {
+        if (state.view === "table") {
+          await loadTable({ silent: true });
+        } else if (state.view === "planner") {
+          await refreshPlan({ silent: true });
+        }
       } else {
         await refreshKitchenDetail();
         await refreshMe();
@@ -1007,6 +1042,9 @@
     dom.readonlyBanner.hidden = canEdit();
     dom.clearWeek.hidden = !canEdit();
     dom.addIngredientButton.hidden = !canEdit();
+    dom.plannerTools.hidden = !canEdit();
+    dom.tableAddGrocery.hidden = !canEdit();
+    dom.groceryEmptyAction.hidden = !canEdit();
     if (canEdit()) {
       dom.plannerSub.innerHTML = '点任意食物编辑，按每餐的 <span>＋</span> 添加新食物。';
     } else {
@@ -1289,6 +1327,7 @@
     const isOver = total > target;
     const progress = Math.min(100, Math.round((total / target) * 100));
     const weekday = DAY_NAMES[index];
+    const cook = state.plan?.cooks?.[key] || null;
 
     let status;
     if (!itemCount) {
@@ -1300,6 +1339,15 @@
     } else {
       status = `还可摄入 ${formatNumber(target - total)} kcal`;
     }
+
+    const cookInner = cook
+      ? `<span class="day-cook-avatar" aria-hidden="true">${escapeHtml(firstCharacter(cook.displayName))}</span>
+         <span class="day-cook-name">${escapeHtml(cook.displayName)}掌勺</span>`
+      : `<span class="day-cook-avatar is-empty" aria-hidden="true"><svg class="icon"><use href="#icon-chef"></use></svg></span>
+         <span class="day-cook-name">${editable ? "今天谁做饭？" : "还没安排掌勺"}</span>`;
+    const cookMarkup = editable
+      ? `<button class="day-cook${cook ? " is-set" : " is-empty"}" type="button" data-cook-date="${key}" aria-label="${weekday}${cook ? `由${escapeHtml(cook.displayName)}掌勺，点击修改` : "还没有安排掌勺，点击指定"}">${cookInner}</button>`
+      : `<div class="day-cook${cook ? " is-set" : " is-empty"} is-static">${cookInner}</div>`;
 
     const meals = MEALS.map((meal) => {
       const items = getMealItems(key, meal.key);
@@ -1337,6 +1385,13 @@
             <span class="meal-name">${meal.label}</span>
             <span class="meal-total" aria-hidden="true">${mealTotal ? formatNumber(mealTotal) : ""}</span>
             ${
+              editable && items.length
+                ? `<button class="meal-favorite" type="button" data-favorite-date="${key}" data-favorite-meal="${meal.key}" aria-label="收藏${weekday}${meal.label}" title="收藏这一餐">
+                     <svg class="icon" aria-hidden="true"><use href="#icon-star"></use></svg>
+                   </button>`
+                : ""
+            }
+            ${
               editable
                 ? `<button class="meal-add" type="button" data-date="${key}" data-meal="${meal.key}" aria-label="为${weekday}${meal.label}添加食物" title="添加${meal.label}">
                      <svg class="icon" aria-hidden="true"><use href="#icon-plus"></use></svg>
@@ -1370,6 +1425,7 @@
               : `<span class="day-index" aria-hidden="true">${pad(index + 1)}</span>`
           }
         </header>
+        ${cookMarkup}
         <div class="day-meals">${meals}</div>
         <footer class="day-foot">
           <div class="day-total-row">
@@ -1899,6 +1955,844 @@
   }
 
   /* =========================================================
+     Table module: cooks, polls & grocery duty
+     ========================================================= */
+
+  function tableWeekStart() {
+    return state.tableWeekStart || state.weekStart;
+  }
+
+  function getCookForDate(key) {
+    const weekKey = dateKey(startOfWeek(parseDateKey(key)));
+    if (state.table?.weekStart === weekKey && state.table.cooks) {
+      return state.table.cooks[key] || null;
+    }
+    if (state.plan?.cooks && dateKey(state.weekStart) === weekKey) {
+      return state.plan.cooks[key] || null;
+    }
+    return null;
+  }
+
+  async function loadTable({ silent = false } = {}) {
+    if (!state.kitchen) return;
+    if (!state.tableWeekStart) state.tableWeekStart = state.weekStart;
+    const sequence = ++state.tableSequence;
+    state.tableLoading = true;
+    state.tableError = null;
+    if (!silent) renderTable();
+
+    try {
+      const data = await api(
+        `/api/kitchens/${encodeURIComponent(state.kitchen.id)}/table?weekStart=${encodeURIComponent(dateKey(tableWeekStart()))}`,
+      );
+      if (sequence !== state.tableSequence) return;
+      state.table = data;
+      if (Array.isArray(data.members)) state.members = data.members;
+      if (Array.isArray(data.messages) && messagesChanged(data.messages)) {
+        state.messages = data.messages;
+        renderMessages();
+      }
+      if (state.plan && data.weekStart === dateKey(state.weekStart)) {
+        state.plan.cooks = data.cooks;
+      }
+      renderTable();
+    } catch (error) {
+      if (sequence !== state.tableSequence) return;
+      state.tableError = error.message;
+      renderTable();
+      if (!silent) showToast(error.message);
+      if (error.status === 404 || error.status === 403) await handleKitchenAccessLost();
+    } finally {
+      if (sequence === state.tableSequence) {
+        state.tableLoading = false;
+        renderTable();
+      }
+    }
+  }
+
+  function renderTable() {
+    if (!state.kitchen) return;
+    const weekStart = tableWeekStart();
+    const dates = getWeekDates(weekStart);
+    dom.tableWeekLabel.textContent = formatRange(dates[0], dates[6]);
+    dom.tableAddGrocery.hidden = !canEdit();
+
+    const sameWeek = state.table?.weekStart === dateKey(weekStart);
+    const planSameWeek = state.plan && dateKey(state.weekStart) === dateKey(weekStart);
+    const cooks = sameWeek ? state.table.cooks : planSameWeek ? state.plan.cooks : {};
+    renderCookRoster(dates, cooks);
+    renderPolls(state.table?.polls || []);
+    renderGroceries(sameWeek ? state.table.groceries : []);
+  }
+
+  function renderCookRoster(dates, cooks) {
+    if (!dom.cookRoster) return;
+    const editable = canEdit();
+    const todayKey = dateKey(new Date());
+    dom.cookRoster.innerHTML = dates
+      .map((date, index) => {
+        const key = dateKey(date);
+        const cook = cooks?.[key] || null;
+        const isToday = key === todayKey;
+        const inner = `
+          <span class="roster-day-top">
+            <span>${DAY_NAMES[index]}</span>
+            <em>${formatShortDate(date)}</em>
+          </span>
+          ${
+            cook
+              ? `<span class="roster-avatar" aria-hidden="true">${escapeHtml(firstCharacter(cook.displayName))}</span>
+                 <strong>${escapeHtml(cook.displayName)}</strong>
+                 <small class="roster-role">掌勺</small>`
+              : `<span class="roster-avatar is-empty" aria-hidden="true"><svg class="icon"><use href="#icon-chef"></use></svg></span>
+                 <strong class="is-empty">待安排</strong>
+                 <small class="roster-role">${editable ? "点这里指定" : "还没人做饭"}</small>`
+          }
+        `;
+        if (!editable) {
+          return `<div class="roster-day${isToday ? " is-today" : ""}${cook ? " has-cook" : ""}">${inner}</div>`;
+        }
+        return `<button class="roster-day${isToday ? " is-today" : ""}${cook ? " has-cook" : ""}" type="button" data-cook-date="${key}" aria-label="${DAY_NAMES[index]}${cook ? `由${escapeHtml(cook.displayName)}掌勺，点击修改` : "还没有安排掌勺，点击指定"}">${inner}</button>`;
+      })
+      .join("");
+  }
+
+  function renderPolls(polls) {
+    if (!dom.pollList) return;
+    const list = Array.isArray(polls) ? polls : [];
+    const openCount = list.filter((poll) => poll.status === "open").length;
+    dom.pollCount.textContent = `${openCount} 个进行中`;
+
+    if (!state.table && state.tableLoading) {
+      dom.pollList.innerHTML = '<p class="table-loading">正在加载饭局安排…</p>';
+      dom.pollEmpty.hidden = true;
+      return;
+    }
+    if (!list.length) {
+      dom.pollList.innerHTML = "";
+      dom.pollEmpty.hidden = false;
+      return;
+    }
+    dom.pollEmpty.hidden = true;
+    dom.pollList.innerHTML = list
+      .map((poll) => {
+        const closed = poll.status !== "open";
+        const canManage = state.kitchen.role === "owner" || poll.createdBy === state.user?.id;
+        const options = poll.options
+          .map((option) => {
+            const percent = poll.totalVotes ? Math.round((option.count / poll.totalVotes) * 100) : 0;
+            const mine = poll.myVoteOptionId === option.id;
+            const voters = option.voters.map((voter) => voter.displayName).join("、");
+            return `
+              <button
+                class="poll-option${mine ? " is-mine" : ""}${closed ? " is-closed" : ""}"
+                type="button"
+                data-poll-vote="${escapeHtml(poll.id)}"
+                data-option-id="${escapeHtml(option.id)}"
+                aria-pressed="${mine ? "true" : "false"}"
+                ${closed ? "disabled" : ""}
+              >
+                <span class="poll-option-head">
+                  <span class="poll-option-label">${escapeHtml(option.label)}</span>
+                  <span class="poll-option-count">${option.count} 票${mine ? " · 已投" : ""}</span>
+                </span>
+                <span class="poll-option-track" aria-hidden="true"><span class="poll-option-fill" style="width:${percent}%"></span></span>
+                ${voters ? `<span class="poll-option-voters">${escapeHtml(voters)}</span>` : '<span class="poll-option-voters is-empty">还没有人选</span>'}
+              </button>
+            `;
+          })
+          .join("");
+        return `
+          <article class="poll-card${closed ? " is-closed" : ""}">
+            <header class="poll-card-head">
+              <div class="poll-card-title">
+                <span class="poll-status${closed ? " is-closed" : ""}">${closed ? "已结束" : "进行中"}</span>
+                <h3>${escapeHtml(poll.title)}</h3>
+                ${poll.note ? `<p>${escapeHtml(poll.note)}</p>` : ""}
+              </div>
+              ${
+                canManage
+                  ? `<div class="poll-actions">
+                       ${
+                         closed
+                           ? `<button class="poll-action" type="button" data-poll-reopen="${escapeHtml(poll.id)}">重新开启</button>`
+                           : `<button class="poll-action" type="button" data-poll-close="${escapeHtml(poll.id)}">结束投票</button>`
+                       }
+                       <button class="poll-delete" type="button" data-poll-delete="${escapeHtml(poll.id)}" aria-label="删除投票「${escapeHtml(poll.title)}」">
+                         <svg class="icon" aria-hidden="true"><use href="#icon-trash"></use></svg>
+                       </button>
+                     </div>`
+                  : ""
+              }
+            </header>
+            <div class="poll-options">${options}</div>
+            <footer class="poll-foot">
+              <span>共 ${poll.totalVotes} 票 · ${escapeHtml(poll.creatorName)} 发起</span>
+              <time datetime="${escapeHtml(poll.createdAt)}">${escapeHtml(formatMessageTime(poll.createdAt))}</time>
+            </footer>
+          </article>
+        `;
+      })
+      .join("");
+  }
+
+  function renderGroceries(groceries) {
+    if (!dom.groceryList) return;
+    const list = Array.isArray(groceries) ? groceries : [];
+    dom.groceryCount.textContent = `${list.length} 项`;
+    if (!state.table && state.tableLoading) {
+      dom.groceryList.innerHTML = '<p class="table-loading">正在加载本周安排…</p>';
+      dom.groceryEmpty.hidden = true;
+      return;
+    }
+    if (!list.length) {
+      dom.groceryList.innerHTML = "";
+      dom.groceryEmpty.hidden = false;
+      return;
+    }
+    dom.groceryEmpty.hidden = true;
+    dom.groceryList.innerHTML = list
+      .map((duty) => {
+        const canToggle = canEdit() || duty.userId === state.user?.id;
+        const dayLabel = duty.dayIndex === null ? "本周" : DAY_NAMES[duty.dayIndex] || "本周";
+        return `
+          <div class="grocery-row${duty.done ? " is-done" : ""}">
+            ${
+              canToggle
+                ? `<button class="grocery-check" type="button" data-grocery-done="${escapeHtml(duty.id)}" data-done="${duty.done ? "1" : "0"}" aria-pressed="${duty.done ? "true" : "false"}" aria-label="${duty.done ? "把买菜安排标记为未完成" : "把买菜安排标记为已完成"}">
+                     ${duty.done ? '<svg class="icon" aria-hidden="true"><use href="#icon-check"></use></svg>' : ""}
+                   </button>`
+                : `<span class="grocery-check is-static" aria-hidden="true">${duty.done ? '<svg class="icon"><use href="#icon-check"></use></svg>' : ""}</span>`
+            }
+            <span class="grocery-avatar" aria-hidden="true">${escapeHtml(firstCharacter(duty.userName))}</span>
+            <div class="grocery-copy">
+              <strong>${escapeHtml(duty.userName)}<span class="grocery-day">${dayLabel}</span></strong>
+              <span>${escapeHtml(duty.note || "负责本周采购")}</span>
+            </div>
+            ${
+              canEdit()
+                ? `<button class="grocery-delete" type="button" data-grocery-delete="${escapeHtml(duty.id)}" aria-label="删除${escapeHtml(duty.userName)}的买菜安排">
+                     <svg class="icon" aria-hidden="true"><use href="#icon-trash"></use></svg>
+                   </button>`
+                : ""
+            }
+          </div>
+        `;
+      })
+      .join("");
+  }
+
+  async function changeTableWeek(offset) {
+    const base = state.tableWeekStart || state.weekStart;
+    state.tableWeekStart = addDays(base, offset * 7);
+    state.table = null;
+    renderTable();
+    await loadTable();
+  }
+
+  function openCookModal(date) {
+    if (!state.kitchen || !canEdit()) return;
+    const dateValue = parseDateKey(date);
+    if (!dateValue) return;
+    state.cookDate = date;
+    const weekday = DAY_NAMES[getWeekdayIndex(dateValue)];
+    const cook = getCookForDate(date);
+    dom.cookModalTitle.textContent = `${weekday}谁做饭？`;
+    dom.cookModalCopy.textContent = `${formatShortDate(dateValue)} · 选一位厨房成员来掌勺，安排会同步给所有人。`;
+    dom.cookChoiceList.innerHTML = state.members
+      .map((member) => {
+        const checked = cook?.userId === member.id;
+        const isSelf = member.id === state.user?.id;
+        return `
+          <label class="cook-choice">
+            <input type="radio" name="cookChoice" value="${escapeHtml(member.id)}"${checked ? " checked" : ""}>
+            <span class="cook-choice-avatar" aria-hidden="true">${escapeHtml(firstCharacter(member.displayName))}</span>
+            <span class="cook-choice-copy">
+              <strong>${escapeHtml(member.displayName)}${isSelf ? "（你）" : ""}</strong>
+              <small>${roleLabel(member.role)} · @${escapeHtml(member.username)}</small>
+            </span>
+            <span class="cook-choice-check" aria-hidden="true"><svg class="icon"><use href="#icon-check"></use></svg></span>
+          </label>
+        `;
+      })
+      .join("");
+    dom.cookClear.hidden = !cook;
+    dom.cookError.hidden = true;
+    openModal(dom.cookModal, dom.cookChoiceList.querySelector("input:checked"));
+  }
+
+  function applyCookUpdate(weekStart, cooks) {
+    if (state.table && state.table.weekStart === weekStart) {
+      state.table.cooks = cooks;
+    }
+    if (dateKey(state.weekStart) === weekStart && state.plan) {
+      state.plan.cooks = cooks;
+    }
+    renderPlanner();
+    renderTable();
+  }
+
+  async function saveCook() {
+    if (!state.kitchen || !state.cookDate) return;
+    const selected = dom.cookChoiceList.querySelector('input[name="cookChoice"]:checked');
+    if (!selected) {
+      setFormError(null, dom.cookError, "先选一位掌勺的人吧。");
+      return;
+    }
+    dom.cookSave.disabled = true;
+    const original = dom.cookSave.textContent;
+    dom.cookSave.textContent = "保存中…";
+    try {
+      const data = await api(
+        `/api/kitchens/${encodeURIComponent(state.kitchen.id)}/cooks/${encodeURIComponent(state.cookDate)}`,
+        { method: "PUT", body: { userId: selected.value } },
+      );
+      applyCookUpdate(data.weekStart, data.cooks);
+      closeModal();
+      showToast("掌勺的人已经安排好了。");
+    } catch (error) {
+      setFormError(null, dom.cookError, error.message);
+    } finally {
+      dom.cookSave.disabled = false;
+      dom.cookSave.textContent = original;
+    }
+  }
+
+  async function clearCook() {
+    if (!state.kitchen || !state.cookDate) return;
+    dom.cookClear.disabled = true;
+    try {
+      const data = await api(
+        `/api/kitchens/${encodeURIComponent(state.kitchen.id)}/cooks/${encodeURIComponent(state.cookDate)}`,
+        { method: "DELETE" },
+      );
+      applyCookUpdate(data.weekStart, data.cooks);
+      closeModal();
+      showToast("已清除这一天的掌勺安排。");
+    } catch (error) {
+      showToast(error.message);
+    } finally {
+      dom.cookClear.disabled = false;
+    }
+  }
+
+  function openPollModal() {
+    if (!state.kitchen) return;
+    dom.pollForm.reset();
+    dom.pollTitle.value = "周末吃什么？";
+    dom.pollOptions.value = "火锅\n烤肉\n寿司\n在家随便做点";
+    dom.pollError.hidden = true;
+    openModal(dom.pollModal, dom.pollTitle);
+  }
+
+  async function createPoll(event) {
+    event.preventDefault();
+    if (!state.kitchen) return;
+    const title = dom.pollTitle.value.trim();
+    const note = dom.pollNote.value.trim();
+    const options = [...new Set(
+      dom.pollOptions.value
+        .split("\n")
+        .map((line) => line.trim())
+        .filter(Boolean),
+    )];
+    if (!title) {
+      setFormError(dom.pollTitle, dom.pollError, "给投票起个标题吧。");
+      return;
+    }
+    if (options.length < 2) {
+      setFormError(dom.pollOptions, dom.pollError, "至少写两个不同的选项，每行一个。");
+      return;
+    }
+    if (options.length > 6) {
+      setFormError(dom.pollOptions, dom.pollError, "最多只能有六个选项。");
+      return;
+    }
+    dom.pollSubmit.disabled = true;
+    const original = dom.pollSubmit.textContent;
+    dom.pollSubmit.textContent = "发起中…";
+    try {
+      const data = await api(
+        `/api/kitchens/${encodeURIComponent(state.kitchen.id)}/polls`,
+        { method: "POST", body: { title, note, options } },
+      );
+      if (state.table) state.table.polls = data.polls || [];
+      renderTable();
+      closeModal();
+      showToast("投票已发起，等大家来选。");
+    } catch (error) {
+      setFormError(null, dom.pollError, error.message);
+    } finally {
+      dom.pollSubmit.disabled = false;
+      dom.pollSubmit.textContent = original;
+    }
+  }
+
+  async function votePoll(pollId, optionId) {
+    if (!state.kitchen || state.pollVoting) return;
+    state.pollVoting = true;
+    try {
+      const data = await api(
+        `/api/kitchens/${encodeURIComponent(state.kitchen.id)}/polls/${encodeURIComponent(pollId)}/vote`,
+        { method: "POST", body: { optionId } },
+      );
+      if (state.table) state.table.polls = data.polls || [];
+      renderTable();
+      showToast("投票已记录。");
+    } catch (error) {
+      showToast(error.message);
+    } finally {
+      state.pollVoting = false;
+    }
+  }
+
+  async function setPollStatus(pollId, action) {
+    if (!state.kitchen) return;
+    try {
+      const data = await api(
+        `/api/kitchens/${encodeURIComponent(state.kitchen.id)}/polls/${encodeURIComponent(pollId)}/${action}`,
+        { method: "POST" },
+      );
+      if (state.table) state.table.polls = data.polls || [];
+      renderTable();
+      showToast(action === "close" ? "投票已结束。" : "投票已重新开启。");
+    } catch (error) {
+      showToast(error.message);
+    }
+  }
+
+  async function deletePoll(pollId) {
+    if (!state.kitchen) return;
+    const data = await api(
+      `/api/kitchens/${encodeURIComponent(state.kitchen.id)}/polls/${encodeURIComponent(pollId)}`,
+      { method: "DELETE" },
+    );
+    if (state.table) state.table.polls = data.polls || [];
+    renderTable();
+    showToast("投票已删除。");
+  }
+
+  function openGroceryModal() {
+    if (!state.kitchen || !canEdit()) return;
+    const dates = getWeekDates(tableWeekStart());
+    dom.groceryMember.innerHTML = state.members
+      .map(
+        (member) =>
+          `<option value="${escapeHtml(member.id)}"${member.id === state.user?.id ? " selected" : ""}>${escapeHtml(member.displayName)}${member.id === state.user?.id ? "（你）" : ""}</option>`,
+      )
+      .join("");
+    dom.groceryDay.innerHTML =
+      '<option value="">不指定</option>' +
+      dates
+        .map(
+          (date, index) =>
+            `<option value="${index}">${DAY_NAMES[index]} ${formatShortDate(date)}</option>`,
+        )
+        .join("");
+    dom.groceryNote.value = "";
+    dom.groceryError.hidden = true;
+    openModal(dom.groceryModal, dom.groceryMember);
+  }
+
+  async function saveGrocery(event) {
+    event.preventDefault();
+    if (!state.kitchen) return;
+    const userId = dom.groceryMember.value;
+    if (!userId) {
+      setFormError(dom.groceryMember, dom.groceryError, "先选一位负责买菜的成员。");
+      return;
+    }
+    const dayValue = dom.groceryDay.value;
+    dom.grocerySubmit.disabled = true;
+    const original = dom.grocerySubmit.textContent;
+    dom.grocerySubmit.textContent = "保存中…";
+    try {
+      const data = await api(
+        `/api/kitchens/${encodeURIComponent(state.kitchen.id)}/groceries`,
+        {
+          method: "POST",
+          body: {
+            weekStart: dateKey(tableWeekStart()),
+            userId,
+            dayIndex: dayValue === "" ? null : Number(dayValue),
+            note: dom.groceryNote.value.trim(),
+          },
+        },
+      );
+      if (state.table) state.table.groceries = data.groceries || [];
+      renderTable();
+      closeModal();
+      showToast("买菜安排已经记下。");
+    } catch (error) {
+      setFormError(null, dom.groceryError, error.message);
+    } finally {
+      dom.grocerySubmit.disabled = false;
+      dom.grocerySubmit.textContent = original;
+    }
+  }
+
+  async function toggleGroceryDone(groceryId, done) {
+    if (!state.kitchen) return;
+    try {
+      const data = await api(
+        `/api/kitchens/${encodeURIComponent(state.kitchen.id)}/groceries/${encodeURIComponent(groceryId)}`,
+        { method: "PATCH", body: { done: !done } },
+      );
+      if (state.table) state.table.groceries = data.groceries || [];
+      renderTable();
+    } catch (error) {
+      showToast(error.message);
+    }
+  }
+
+  async function deleteGrocery(groceryId) {
+    if (!state.kitchen) return;
+    const data = await api(
+      `/api/kitchens/${encodeURIComponent(state.kitchen.id)}/groceries/${encodeURIComponent(groceryId)}`,
+      { method: "DELETE" },
+    );
+    if (state.table) state.table.groceries = data.groceries || [];
+    renderTable();
+    showToast("买菜安排已删除。");
+  }
+
+  /* =========================================================
+     Recipe tools: week copy, templates & favorites
+     ========================================================= */
+
+  async function copyLastWeek() {
+    if (!state.kitchen || !canEdit()) return;
+    const sourceWeekStart = addDays(state.weekStart, -7);
+    const targetWeekStart = state.weekStart;
+    const dates = getWeekDates(sourceWeekStart);
+    const itemCount = getWeekTotals().reduce((total, day) => total + day.count, 0);
+    askConfirm({
+      title: "复制上周食谱到本周？",
+      copy: `会把 ${formatRange(dates[0], dates[6])} 的安排，按相同的星期追加到这一周。${
+        itemCount ? `这一周已有 ${itemCount} 道食物，不会被覆盖。` : "这一周还是空的，复制过来刚刚好。"
+      }`,
+      confirmLabel: "复制过来",
+      action: async () => {
+        const data = await api(
+          `/api/kitchens/${encodeURIComponent(state.kitchen.id)}/plan/copy`,
+          {
+            method: "POST",
+            body: {
+              sourceWeekStart: dateKey(sourceWeekStart),
+              targetWeekStart: dateKey(targetWeekStart),
+              mode: "merge",
+            },
+          },
+        );
+        applyPlanResponse(data.plan);
+        showToast(`已复制 ${data.copied} 道食物到这一周。`);
+      },
+    });
+  }
+
+  function openRecipeTools(tab = "templates") {
+    if (!state.kitchen) return;
+    switchRecipeTab(tab);
+    const week = getISOWeekInfo(state.weekStart);
+    dom.templateNameInput.value = `第 ${week.week} 周食谱`;
+    dom.templateSaveHint.textContent = `把 ${formatRange(
+      getWeekDates(state.weekStart)[0],
+      getWeekDates(state.weekStart)[6],
+    )} 的安排存成模板，之后可以一键套用到任意一周。`;
+    openModal(dom.recipeToolsModal, dom.recipeTabTemplates);
+    loadRecipeTools();
+  }
+
+  async function loadRecipeTools() {
+    if (!state.kitchen) return;
+    renderRecipeTools();
+    try {
+      const [templatesData, favoritesData] = await Promise.all([
+        api(`/api/kitchens/${encodeURIComponent(state.kitchen.id)}/templates`),
+        api(`/api/kitchens/${encodeURIComponent(state.kitchen.id)}/favorites`),
+      ]);
+      state.templates = templatesData.templates || [];
+      state.favorites = favoritesData.favorites || [];
+      state.recipeToolsLoaded = true;
+      renderRecipeTools();
+    } catch (error) {
+      showToast(error.message);
+    }
+  }
+
+  function switchRecipeTab(tab) {
+    state.recipeTab = tab === "favorites" ? "favorites" : "templates";
+    const isTemplates = state.recipeTab === "templates";
+    dom.recipeTabTemplates.classList.toggle("is-active", isTemplates);
+    dom.recipeTabFavorites.classList.toggle("is-active", !isTemplates);
+    dom.recipeTabTemplates.setAttribute("aria-selected", String(isTemplates));
+    dom.recipeTabFavorites.setAttribute("aria-selected", String(!isTemplates));
+    dom.recipePanelTemplates.hidden = !isTemplates;
+    dom.recipePanelFavorites.hidden = isTemplates;
+  }
+
+  function renderRecipeTools() {
+    if (!dom.templateList) return;
+    const templates = state.templates || [];
+    const favorites = state.favorites || [];
+    const loading = !state.recipeToolsLoaded;
+
+    if (loading && !templates.length) {
+      dom.templateList.innerHTML = '<p class="table-loading">正在加载模板…</p>';
+    } else if (!templates.length) {
+      dom.templateList.innerHTML = "";
+    } else {
+      dom.templateList.innerHTML = templates
+        .map((template) => {
+          const canDelete =
+            state.kitchen.role === "owner" || template.creatorId === state.user?.id;
+          return `
+            <div class="template-item" data-template-id="${escapeHtml(template.id)}">
+              <span class="template-mark" aria-hidden="true"><svg class="icon"><use href="#icon-bookmark"></use></svg></span>
+              <div class="template-copy">
+                <strong>${escapeHtml(template.name)}</strong>
+                <span>${template.itemCount} 道食物 · ${template.dayCount} 天 · ${formatNumber(template.totalCalories)} kcal · ${escapeHtml(template.creatorName)} 保存</span>
+              </div>
+              <div class="template-actions">
+                <button class="mini-button" type="button" data-apply-template="${escapeHtml(template.id)}">套用</button>
+                ${
+                  canDelete
+                    ? `<button class="mini-icon-button" type="button" data-delete-template="${escapeHtml(template.id)}" data-template-name="${escapeHtml(template.name)}" aria-label="删除模板「${escapeHtml(template.name)}」">
+                         <svg class="icon" aria-hidden="true"><use href="#icon-trash"></use></svg>
+                       </button>`
+                    : ""
+                }
+              </div>
+            </div>
+          `;
+        })
+        .join("");
+    }
+    dom.templateEmpty.hidden = loading || templates.length > 0;
+
+    if (loading && !favorites.length) {
+      dom.favoriteList.innerHTML = '<p class="table-loading">正在加载收藏…</p>';
+    } else if (!favorites.length) {
+      dom.favoriteList.innerHTML = "";
+    } else {
+      dom.favoriteList.innerHTML = favorites
+        .map((favorite) => {
+          const canDelete =
+            state.kitchen.role === "owner" || favorite.creatorId === state.user?.id;
+          const meal = MEALS.find((item) => item.key === favorite.meal);
+          const itemsLabel = favorite.items.map((item) => item.name).join("、");
+          return `
+            <div class="favorite-item" data-favorite-id="${escapeHtml(favorite.id)}">
+              <span class="favorite-meal-badge" aria-hidden="true">${meal?.short || "餐"}</span>
+              <div class="favorite-copy">
+                <strong>${escapeHtml(favorite.name)}</strong>
+                <span>${escapeHtml(itemsLabel)} · ${formatNumber(favorite.totalCalories)} kcal</span>
+              </div>
+              <div class="favorite-actions">
+                <button class="mini-button" type="button" data-apply-favorite="${escapeHtml(favorite.id)}">加入</button>
+                ${
+                  canDelete
+                    ? `<button class="mini-icon-button" type="button" data-delete-favorite="${escapeHtml(favorite.id)}" data-favorite-name="${escapeHtml(favorite.name)}" aria-label="删除收藏「${escapeHtml(favorite.name)}」">
+                         <svg class="icon" aria-hidden="true"><use href="#icon-trash"></use></svg>
+                       </button>`
+                    : ""
+                }
+              </div>
+            </div>
+          `;
+        })
+        .join("");
+    }
+    dom.favoriteEmpty.hidden = loading || favorites.length > 0;
+  }
+
+  async function saveWeekTemplate() {
+    if (!state.kitchen || !canEdit()) return;
+    const name = dom.templateNameInput.value.trim() || `第 ${getISOWeekInfo(state.weekStart).week} 周食谱`;
+    dom.saveWeekTemplate.disabled = true;
+    const original = dom.saveWeekTemplate.textContent;
+    dom.saveWeekTemplate.textContent = "保存中…";
+    try {
+      const data = await api(
+        `/api/kitchens/${encodeURIComponent(state.kitchen.id)}/templates`,
+        { method: "POST", body: { name, weekStart: dateKey(state.weekStart) } },
+      );
+      state.templates = data.templates || [];
+      state.recipeToolsLoaded = true;
+      renderRecipeTools();
+      showToast("本周已保存为模板。");
+    } catch (error) {
+      showToast(error.message);
+    } finally {
+      dom.saveWeekTemplate.disabled = false;
+      dom.saveWeekTemplate.textContent = original;
+    }
+  }
+
+  async function deleteTemplate(templateId) {
+    if (!state.kitchen) return;
+    const data = await api(
+      `/api/kitchens/${encodeURIComponent(state.kitchen.id)}/templates/${encodeURIComponent(templateId)}`,
+      { method: "DELETE" },
+    );
+    state.templates = data.templates || [];
+    renderRecipeTools();
+    showToast("模板已删除。");
+  }
+
+  function openTemplateApply(templateId) {
+    const template = state.templates.find((item) => item.id === templateId);
+    if (!template) return;
+    state.pendingTemplate = template;
+    dom.templateApplySummary.innerHTML = `
+      <span class="template-mark" aria-hidden="true"><svg class="icon"><use href="#icon-bookmark"></use></svg></span>
+      <div>
+        <strong>${escapeHtml(template.name)}</strong>
+        <span>${template.itemCount} 道食物 · ${template.dayCount} 天 · ${formatNumber(template.totalCalories)} kcal</span>
+      </div>
+    `;
+    dom.templateApplyError.hidden = true;
+    const replace = dom.templateApplyModal.querySelector('input[name="templateMode"][value="replace"]');
+    if (replace) replace.checked = true;
+    openModal(dom.templateApplyModal, dom.templateApplyConfirm);
+  }
+
+  async function confirmTemplateApply() {
+    if (!state.kitchen || !state.pendingTemplate) return;
+    const selected = dom.templateApplyModal.querySelector('input[name="templateMode"]:checked');
+    const mode = selected?.value === "merge" ? "merge" : "replace";
+    dom.templateApplyConfirm.disabled = true;
+    const original = dom.templateApplyConfirm.textContent;
+    dom.templateApplyConfirm.textContent = "套用中…";
+    try {
+      const data = await api(
+        `/api/kitchens/${encodeURIComponent(state.kitchen.id)}/templates/${encodeURIComponent(state.pendingTemplate.id)}/apply`,
+        { method: "POST", body: { weekStart: dateKey(state.weekStart), mode } },
+      );
+      applyPlanResponse(data.plan);
+      closeModal();
+      showToast(`已套用模板，加入 ${data.applied} 道食物。`);
+    } catch (error) {
+      setFormError(null, dom.templateApplyError, error.message);
+    } finally {
+      dom.templateApplyConfirm.disabled = false;
+      dom.templateApplyConfirm.textContent = original;
+    }
+  }
+
+  function openFavoriteModal(date, mealKey) {
+    if (!state.kitchen || !canEdit()) return;
+    const dateValue = parseDateKey(date);
+    const meal = MEALS.find((item) => item.key === mealKey);
+    const items = getMealItems(date, mealKey);
+    if (!dateValue || !meal || !items.length) return;
+    state.favoriteSource = { date, meal: mealKey, items };
+    const defaultName =
+      items.length === 1 ? items[0].name : `${items[0].name} 套餐`;
+    dom.favoriteModalCopy.textContent = `${formatDayLong(date)} · ${meal.label}，共 ${items.length} 道食物。存进收藏后，下次可以直接加进任意一天。`;
+    dom.favoriteName.value = defaultName;
+    dom.favoritePreview.innerHTML = `
+      ${items
+        .map(
+          (item) =>
+            `<span class="favorite-preview-row"><span>${escapeHtml(item.name)}</span><em>${formatNumber(item.calories)} kcal</em></span>`,
+        )
+        .join("")}
+      <span class="favorite-preview-total">合计 ${formatNumber(items.reduce((total, item) => total + item.calories, 0))} kcal</span>
+    `;
+    dom.favoriteError.hidden = true;
+    openModal(dom.favoriteModal, dom.favoriteName);
+  }
+
+  async function saveFavorite() {
+    if (!state.kitchen || !state.favoriteSource) return;
+    const name = dom.favoriteName.value.trim();
+    if (!name) {
+      setFormError(dom.favoriteName, dom.favoriteError, "给它起个名字吧。");
+      return;
+    }
+    dom.favoriteSave.disabled = true;
+    const original = dom.favoriteSave.textContent;
+    dom.favoriteSave.textContent = "收藏中…";
+    try {
+      const data = await api(
+        `/api/kitchens/${encodeURIComponent(state.kitchen.id)}/favorites`,
+        {
+          method: "POST",
+          body: {
+            date: state.favoriteSource.date,
+            meal: state.favoriteSource.meal,
+            name,
+          },
+        },
+      );
+      state.favorites = data.favorites || [];
+      state.recipeToolsLoaded = true;
+      renderRecipeTools();
+      closeModal();
+      showToast("这一餐已经收藏好了。");
+    } catch (error) {
+      setFormError(null, dom.favoriteError, error.message);
+    } finally {
+      dom.favoriteSave.disabled = false;
+      dom.favoriteSave.textContent = original;
+    }
+  }
+
+  function openFavoriteApply(favoriteId) {
+    const favorite = state.favorites.find((item) => item.id === favoriteId);
+    if (!favorite) return;
+    state.pendingFavorite = favorite;
+    const dates = getWeekDates(state.weekStart);
+    const todayKey = dateKey(new Date());
+    dom.favoriteApplyDay.innerHTML = dates
+      .map((date, index) => {
+        const key = dateKey(date);
+        return `<option value="${key}"${key === todayKey ? " selected" : ""}>${DAY_NAMES[index]} ${formatShortDate(date)}</option>`;
+      })
+      .join("");
+    dom.favoriteApplyMeal.value = favorite.meal;
+    dom.favoriteApplyPreview.classList.add("is-inline");
+    dom.favoriteApplyPreview.innerHTML = `
+      <span class="favorite-meal-badge" aria-hidden="true">${MEALS.find((item) => item.key === favorite.meal)?.short || "餐"}</span>
+      <div>
+        <strong>${escapeHtml(favorite.name)}</strong>
+        <span>${escapeHtml(favorite.items.map((item) => item.name).join("、"))} · ${formatNumber(favorite.totalCalories)} kcal</span>
+      </div>
+    `;
+    dom.favoriteApplyError.hidden = true;
+    openModal(dom.favoriteApplyModal, dom.favoriteApplySave);
+  }
+
+  async function confirmFavoriteApply() {
+    if (!state.kitchen || !state.pendingFavorite) return;
+    dom.favoriteApplySave.disabled = true;
+    const original = dom.favoriteApplySave.textContent;
+    dom.favoriteApplySave.textContent = "加入中…";
+    try {
+      const data = await api(
+        `/api/kitchens/${encodeURIComponent(state.kitchen.id)}/favorites/${encodeURIComponent(state.pendingFavorite.id)}/apply`,
+        {
+          method: "POST",
+          body: {
+            weekStart: dateKey(state.weekStart),
+            date: dom.favoriteApplyDay.value,
+            meal: dom.favoriteApplyMeal.value,
+          },
+        },
+      );
+      applyPlanResponse(data.plan);
+      closeModal();
+      showToast(`已把 ${data.added} 道食物加入食谱。`);
+    } catch (error) {
+      setFormError(null, dom.favoriteApplyError, error.message);
+    } finally {
+      dom.favoriteApplySave.disabled = false;
+      dom.favoriteApplySave.textContent = original;
+    }
+  }
+
+  /* =========================================================
      Kitchen page
      ========================================================= */
 
@@ -1969,6 +2863,17 @@
     renderActiveInvites(owner);
     renderMemberList(owner);
     renderKitchenList();
+  }
+
+  function messagesChanged(next) {
+    const current = state.messages || [];
+    if (!Array.isArray(next) || current.length !== next.length) return true;
+    return next.some(
+      (message, index) =>
+        message.id !== current[index].id ||
+        message.content !== current[index].content ||
+        message.authorName !== current[index].authorName,
+    );
   }
 
   function renderMessages() {
@@ -2158,7 +3063,7 @@
 
   function setView(view, { updateHash = true } = {}) {
     if (!state.user) return;
-    if (!["planner", "ingredients", "wellness", "messages", "kitchen"].includes(view)) view = "planner";
+    if (!["planner", "ingredients", "table", "wellness", "kitchen"].includes(view)) view = "planner";
     if (!state.kitchen) view = "kitchen";
     if (view !== "ingredients" && state.ingredientBulkMode) {
       state.ingredientBulkMode = false;
@@ -2168,8 +3073,8 @@
 
     dom.plannerView.hidden = view !== "planner";
     dom.ingredientsView.hidden = view !== "ingredients";
+    dom.tableView.hidden = view !== "table";
     dom.wellnessView.hidden = view !== "wellness";
-    dom.messagesView.hidden = view !== "messages";
     dom.kitchenView.hidden = view !== "kitchen";
     selectNav(view);
 
@@ -2177,14 +3082,14 @@
       renderPlanner();
     } else if (view === "ingredients") {
       renderIngredients();
+    } else if (view === "table") {
+      if (!state.tableWeekStart) state.tableWeekStart = state.weekStart;
+      renderTable();
+      renderMessages();
+      loadTable();
     } else if (view === "wellness") {
       renderWellness();
       loadWellness();
-    } else if (view === "messages") {
-      renderMessages();
-      refreshKitchenDetail({ render: false }).then(() => {
-        if (state.view === "messages") renderMessages();
-      });
     } else if (view === "kitchen") {
       renderKitchen();
     }
@@ -2194,7 +3099,7 @@
     }
 
     if (state.kitchen) {
-      const names = { planner: "一周食谱", ingredients: "食材库", wellness: "健康", messages: "留言板", kitchen: "厨房" };
+      const names = { planner: "一周食谱", ingredients: "食材库", table: "饭局", wellness: "健康", kitchen: "厨房" };
       document.title = `${names[view]} · ${state.kitchen.name} | 凑狗厨房`;
     }
 
@@ -3401,9 +4306,9 @@
 
     dom.plannerView = id("plannerView");
     dom.ingredientsView = id("ingredientsView");
+    dom.tableView = id("tableView");
     dom.kitchenView = id("kitchenView");
     dom.wellnessView = id("wellnessView");
-    dom.messagesView = id("messagesView");
     dom.wellnessRange = id("wellnessRange");
     dom.wellnessDays = id("wellnessDays");
     dom.sleepBedtime = id("sleepBedtime");
@@ -3437,6 +4342,9 @@
     dom.readonlyBanner = id("readonlyBanner");
     dom.plannerSub = id("plannerSub");
     dom.readonlyManage = id("readonlyManage");
+    dom.plannerTools = id("plannerTools");
+    dom.copyLastWeek = id("copyLastWeek");
+    dom.openRecipeTools = id("openRecipeTools");
     dom.demoBanner = id("demoBanner");
     dom.startBlank = id("startBlank");
     dom.dismissDemo = id("dismissDemo");
@@ -3494,6 +4402,20 @@
     dom.messageSubmit = id("messageSubmit");
     dom.messageCountLabel = id("messageCountLabel");
     dom.messageList = id("messageList");
+    dom.tableStartPoll = id("tableStartPoll");
+    dom.tableAddGrocery = id("tableAddGrocery");
+    dom.tableWeekLabel = id("tableWeekLabel");
+    dom.tablePrevWeek = id("tablePrevWeek");
+    dom.tableNextWeek = id("tableNextWeek");
+    dom.cookRoster = id("cookRoster");
+    dom.pollCount = id("pollCount");
+    dom.pollList = id("pollList");
+    dom.pollEmpty = id("pollEmpty");
+    dom.pollEmptyAction = id("pollEmptyAction");
+    dom.groceryCount = id("groceryCount");
+    dom.groceryList = id("groceryList");
+    dom.groceryEmpty = id("groceryEmpty");
+    dom.groceryEmptyAction = id("groceryEmptyAction");
     dom.kitchenList = id("kitchenList");
     dom.createKitchenButton = id("createKitchenButton");
     dom.joinKitchenButton = id("joinKitchenButton");
@@ -3567,6 +4489,63 @@
     dom.renameKitchenInput = id("renameKitchenInput");
     dom.renameKitchenError = id("renameKitchenError");
 
+    dom.cookModal = id("cookModal");
+    dom.cookModalTitle = id("cookModalTitle");
+    dom.cookModalCopy = id("cookModalCopy");
+    dom.cookChoiceList = id("cookChoiceList");
+    dom.cookError = id("cookError");
+    dom.cookSave = id("cookSave");
+    dom.cookClear = id("cookClear");
+    dom.cookClaim = id("cookClaim");
+
+    dom.recipeToolsModal = id("recipeToolsModal");
+    dom.recipeTabTemplates = id("recipeTabTemplates");
+    dom.recipeTabFavorites = id("recipeTabFavorites");
+    dom.recipePanelTemplates = id("recipePanelTemplates");
+    dom.recipePanelFavorites = id("recipePanelFavorites");
+    dom.templateNameInput = id("templateNameInput");
+    dom.templateSaveHint = id("templateSaveHint");
+    dom.saveWeekTemplate = id("saveWeekTemplate");
+    dom.templateList = id("templateList");
+    dom.templateEmpty = id("templateEmpty");
+    dom.favoriteList = id("favoriteList");
+    dom.favoriteEmpty = id("favoriteEmpty");
+
+    dom.favoriteModal = id("favoriteModal");
+    dom.favoriteModalCopy = id("favoriteModalCopy");
+    dom.favoritePreview = id("favoritePreview");
+    dom.favoriteName = id("favoriteName");
+    dom.favoriteError = id("favoriteError");
+    dom.favoriteSave = id("favoriteSave");
+
+    dom.favoriteApplyModal = id("favoriteApplyModal");
+    dom.favoriteApplyPreview = id("favoriteApplyPreview");
+    dom.favoriteApplyDay = id("favoriteApplyDay");
+    dom.favoriteApplyMeal = id("favoriteApplyMeal");
+    dom.favoriteApplyError = id("favoriteApplyError");
+    dom.favoriteApplySave = id("favoriteApplySave");
+
+    dom.templateApplyModal = id("templateApplyModal");
+    dom.templateApplySummary = id("templateApplySummary");
+    dom.templateApplyError = id("templateApplyError");
+    dom.templateApplyConfirm = id("templateApplyConfirm");
+
+    dom.pollModal = id("pollModal");
+    dom.pollForm = id("pollForm");
+    dom.pollTitle = id("pollTitle");
+    dom.pollNote = id("pollNote");
+    dom.pollOptions = id("pollOptions");
+    dom.pollError = id("pollError");
+    dom.pollSubmit = id("pollSubmit");
+
+    dom.groceryModal = id("groceryModal");
+    dom.groceryForm = id("groceryForm");
+    dom.groceryMember = id("groceryMember");
+    dom.groceryDay = id("groceryDay");
+    dom.groceryNote = id("groceryNote");
+    dom.groceryError = id("groceryError");
+    dom.grocerySubmit = id("grocerySubmit");
+
     dom.confirmModal = id("confirmModal");
     dom.confirmTitle = id("confirmTitle");
     dom.confirmCopy = id("confirmCopy");
@@ -3630,9 +4609,150 @@
     dom.dismissDemo.addEventListener("click", dismissSample);
     dom.startBlank.addEventListener("click", startBlankWeek);
     dom.readonlyManage.addEventListener("click", () => navigate("kitchen"));
+    dom.copyLastWeek.addEventListener("click", copyLastWeek);
+    dom.openRecipeTools.addEventListener("click", () => openRecipeTools("templates"));
+
+    dom.tableStartPoll.addEventListener("click", openPollModal);
+    dom.pollEmptyAction.addEventListener("click", openPollModal);
+    dom.tableAddGrocery.addEventListener("click", openGroceryModal);
+    dom.groceryEmptyAction.addEventListener("click", openGroceryModal);
+    dom.tablePrevWeek.addEventListener("click", () => changeTableWeek(-1));
+    dom.tableNextWeek.addEventListener("click", () => changeTableWeek(1));
+    dom.cookRoster.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-cook-date]");
+      if (button) openCookModal(button.dataset.cookDate);
+    });
+    dom.pollList.addEventListener("click", (event) => {
+      const voteButton = event.target.closest("[data-poll-vote]");
+      if (voteButton && !voteButton.disabled) {
+        votePoll(voteButton.dataset.pollVote, voteButton.dataset.optionId);
+        return;
+      }
+      const closeButton = event.target.closest("[data-poll-close]");
+      if (closeButton) {
+        setPollStatus(closeButton.dataset.pollClose, "close");
+        return;
+      }
+      const reopenButton = event.target.closest("[data-poll-reopen]");
+      if (reopenButton) {
+        setPollStatus(reopenButton.dataset.pollReopen, "reopen");
+        return;
+      }
+      const deleteButton = event.target.closest("[data-poll-delete]");
+      if (deleteButton) {
+        askConfirm({
+          title: "删除这个投票？",
+          copy: "投票和已经投出的选择都会一起消失，其他成员也将看不到。",
+          confirmLabel: "删除投票",
+          action: () => deletePoll(deleteButton.dataset.pollDelete),
+        });
+      }
+    });
+    dom.groceryList.addEventListener("click", (event) => {
+      const doneButton = event.target.closest("[data-grocery-done]");
+      if (doneButton) {
+        toggleGroceryDone(doneButton.dataset.groceryDone, doneButton.dataset.done === "1");
+        return;
+      }
+      const deleteButton = event.target.closest("[data-grocery-delete]");
+      if (deleteButton) {
+        askConfirm({
+          title: "删除这项买菜安排？",
+          copy: "删除后，厨房成员将不再看到这项采购记录。",
+          confirmLabel: "删除安排",
+          action: () => deleteGrocery(deleteButton.dataset.groceryDelete),
+        });
+      }
+    });
+
+    dom.recipeTabTemplates.addEventListener("click", () => switchRecipeTab("templates"));
+    dom.recipeTabFavorites.addEventListener("click", () => switchRecipeTab("favorites"));
+    dom.saveWeekTemplate.addEventListener("click", saveWeekTemplate);
+    dom.templateList.addEventListener("click", (event) => {
+      const applyButton = event.target.closest("[data-apply-template]");
+      if (applyButton) {
+        openTemplateApply(applyButton.dataset.applyTemplate);
+        return;
+      }
+      const deleteButton = event.target.closest("[data-delete-template]");
+      if (deleteButton) {
+        askConfirm({
+          title: "删除这个模板？",
+          copy: `「${deleteButton.dataset.templateName}」会从厨房模板里移除，已经套用过的食谱不受影响。`,
+          confirmLabel: "删除模板",
+          action: () => deleteTemplate(deleteButton.dataset.deleteTemplate),
+        });
+      }
+    });
+    dom.favoriteList.addEventListener("click", (event) => {
+      const applyButton = event.target.closest("[data-apply-favorite]");
+      if (applyButton) {
+        openFavoriteApply(applyButton.dataset.applyFavorite);
+        return;
+      }
+      const deleteButton = event.target.closest("[data-delete-favorite]");
+      if (deleteButton) {
+        askConfirm({
+          title: "删除这个收藏？",
+          copy: `「${deleteButton.dataset.favoriteName}」会从厨房收藏里移除。`,
+          confirmLabel: "删除收藏",
+          action: async () => {
+            if (!state.kitchen) return;
+            const data = await api(
+              `/api/kitchens/${encodeURIComponent(state.kitchen.id)}/favorites/${encodeURIComponent(deleteButton.dataset.deleteFavorite)}`,
+              { method: "DELETE" },
+            );
+            state.favorites = data.favorites || [];
+            renderRecipeTools();
+            showToast("收藏已删除。");
+          },
+        });
+      }
+    });
+
+    dom.cookSave.addEventListener("click", saveCook);
+    dom.cookClear.addEventListener("click", clearCook);
+    dom.cookClaim.addEventListener("click", () => {
+      const input = dom.cookChoiceList.querySelector(`input[name="cookChoice"][value="${state.user?.id}"]`);
+      if (input) {
+        input.checked = true;
+        input.focus({ preventScroll: true });
+      }
+    });
+    dom.cookChoiceList.addEventListener("change", () => {
+      dom.cookError.hidden = true;
+    });
+
+    dom.favoriteSave.addEventListener("click", saveFavorite);
+    dom.favoriteApplySave.addEventListener("click", confirmFavoriteApply);
+    dom.templateApplyConfirm.addEventListener("click", confirmTemplateApply);
+    dom.templateNameInput.addEventListener("input", () => {
+      dom.saveWeekTemplate.disabled = false;
+    });
+    dom.pollForm.addEventListener("submit", createPoll);
+    dom.pollTitle.addEventListener("input", () => {
+      dom.pollError.hidden = true;
+    });
+    dom.pollOptions.addEventListener("input", () => {
+      dom.pollError.hidden = true;
+    });
+    dom.pollNote.addEventListener("input", () => {
+      dom.pollError.hidden = true;
+    });
+    dom.groceryForm.addEventListener("submit", saveGrocery);
 
     dom.weekBoard.addEventListener("click", (event) => {
+      const cookButton = event.target.closest("[data-cook-date]");
+      if (cookButton) {
+        if (canEdit()) openCookModal(cookButton.dataset.cookDate);
+        return;
+      }
       if (!canEdit()) return;
+      const favoriteButton = event.target.closest("[data-favorite-date]");
+      if (favoriteButton) {
+        openFavoriteModal(favoriteButton.dataset.favoriteDate, favoriteButton.dataset.favoriteMeal);
+        return;
+      }
       const clearDayButton = event.target.closest("[data-clear-day]");
       if (clearDayButton) {
         requestClearDay(clearDayButton.dataset.clearDay);
@@ -3898,7 +5018,7 @@
     });
 
     document.querySelectorAll(
-      "[data-close-food], [data-close-target], [data-close-profile], [data-close-clear], [data-close-ingredient], [data-close-quick], [data-close-create-kitchen], [data-close-join-kitchen], [data-close-rename-kitchen], [data-close-confirm]",
+      "[data-close-food], [data-close-target], [data-close-profile], [data-close-clear], [data-close-ingredient], [data-close-quick], [data-close-create-kitchen], [data-close-join-kitchen], [data-close-rename-kitchen], [data-close-cook], [data-close-recipe-tools], [data-close-favorite], [data-close-favorite-apply], [data-close-template-apply], [data-close-poll], [data-close-grocery], [data-close-confirm]",
     ).forEach((element) => {
       element.addEventListener("click", () => closeModal());
     });
@@ -3933,6 +5053,9 @@
 
     window.addEventListener("hashchange", () => {
       if (!state.user || !state.kitchen) return;
+      if (location.hash === "#/messages") {
+        history.replaceState(null, "", `${location.pathname}#/table`);
+      }
       setView(viewFromHash(), { updateHash: false });
     });
 

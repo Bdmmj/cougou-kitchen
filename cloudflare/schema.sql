@@ -101,3 +101,77 @@ CREATE TABLE IF NOT EXISTS exercise_logs (
   updated_at TEXT NOT NULL,
   PRIMARY KEY (user_id, date)
 );
+
+CREATE TABLE IF NOT EXISTS week_templates (
+  id TEXT PRIMARY KEY,
+  kitchen_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  payload TEXT NOT NULL,
+  created_by TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_week_templates_kitchen ON week_templates (kitchen_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS meal_favorites (
+  id TEXT PRIMARY KEY,
+  kitchen_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  meal TEXT NOT NULL,
+  items TEXT NOT NULL,
+  created_by TEXT,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_meal_favorites_kitchen ON meal_favorites (kitchen_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS day_cooks (
+  kitchen_id TEXT NOT NULL,
+  date TEXT NOT NULL,
+  user_id TEXT,
+  assigned_by TEXT,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (kitchen_id, date)
+);
+
+CREATE TABLE IF NOT EXISTS meal_polls (
+  id TEXT PRIMARY KEY,
+  kitchen_id TEXT NOT NULL,
+  title TEXT NOT NULL,
+  note TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'open',
+  created_by TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  closed_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_meal_polls_kitchen ON meal_polls (kitchen_id, status, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS poll_options (
+  id TEXT PRIMARY KEY,
+  poll_id TEXT NOT NULL,
+  label TEXT NOT NULL,
+  position INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_poll_options_poll ON poll_options (poll_id, position);
+
+CREATE TABLE IF NOT EXISTS poll_votes (
+  poll_id TEXT NOT NULL,
+  option_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (poll_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS grocery_duties (
+  id TEXT PRIMARY KEY,
+  kitchen_id TEXT NOT NULL,
+  week_start TEXT NOT NULL,
+  day_index INTEGER,
+  user_id TEXT,
+  note TEXT NOT NULL DEFAULT '',
+  done INTEGER NOT NULL DEFAULT 0,
+  created_by TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_grocery_duties_kitchen_week ON grocery_duties (kitchen_id, week_start, day_index);

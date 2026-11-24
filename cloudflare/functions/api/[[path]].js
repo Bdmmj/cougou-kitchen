@@ -572,9 +572,17 @@ async function getPlan(env, kitchenId, userId, weekStart) {
     days[row.date][row.meal].push({ id: row.id, name: row.name, calories: row.calories });
   });
 
+  let cooks = {};
+  try {
+    cooks = await getCooks(env, kitchenId, dates[0], dates[6]);
+  } catch (error) {
+    console.error("[cougou-cloudflare] 无法读取掌勺安排：", error);
+  }
+
   return {
     weekStart: normalized,
     days,
+    cooks,
     dailyTarget: kitchen.dailyTarget,
     revision: kitchen.revision,
     canEdit: kitchen.role !== "viewer",
@@ -606,6 +614,839 @@ function validatePlanPayload(body, weekStart) {
   if (!name) throw new HttpError(400, "请填写食物名称。");
   const calories = normalizeCalories(body.calories);
   return { date, meal, name, calories };
+}
+
+
+/* =========================================================
+   Week copy, templates, favorites & table module
+   ========================================================= */
+
+async function readWeekItems(env, kitchenId, weekStart) {
+  const dates = weekDateKeys(weekStart);
+  return all(
+    env,
+    `SELECT date, meal, name, calories, position
+     FROM plan_items
+     WHERE kitchen_id = ? AND date >= ? AND date <= ?
+     ORDER BY date ASC, position ASC, created_at ASC`,
+    kitchenId,
+    dates[0],
+    dates[6],
+  );
+}
+
+function weekPayloadFromRows(rows, weekStart) {
+  const dates = weekDateKeys(weekStart);
+  const indexByDate = new Map(dates.map((date, index) => [date, index]));
+  const days = dates.map(() => ({ breakfast: [], lunch: [], dinner: [], snack: [] }));
+  rows.forEach((row) => {
+    const index = indexByDate.get(row.date);
+    if (index === undefined || !MEALS.includes(row.meal)) return;
+    days[index][row.meal].push({ name: row.name, calories: row.calories });
+  });
+  return { days };
+}
+
+function normalizeTemplatePayload(raw) {
+  const sourceDays = Array.isArray(raw?.days) ? raw.days.slice(0, 7) : [];
+  return Array.from({ length: 7 }, (_, index) => {
+    const source = sourceDays[index] && typeof sourceDays[index] === "object" ? sourceDays[index] : {};
+    const day = { breakfast: [], lunch: [], dinner: [], snack: [] };
+    Object.keys(day).forEach((meal) => {
+      const items = Array.isArray(source[meal]) ? source[meal].slice(0, 20) : [];
+      items.forEach((item) => {
+        const name = cleanText(item?.name, 40);
+        const calories = Number(item?.calories);
+        if (!name || !Number.isFinite(calories) || calories < 0 || calories > 5000) return;
+        day[meal].push({ name, calories: Math.round(calories) });
+      });
+    });
+    return day;
+  });
+}
+
+function templateStats(days) {
+  let itemCount = 0;
+  let totalCalories = 0;
+  let dayCount = 0;
+  days.forEach((day) => {
+    let dayItems = 0;
+    Object.values(day).forEach((items) => {
+      itemCount += items.length;
+      dayItems += items.length;
+      items.forEach((item) => {
+        totalCalories += item.calories;
+      });
+    });
+    if (dayItems) dayCount += 1;
+  });
+  return { itemCount, totalCalories, dayCount };
+}
+
+function mapTemplate(row) {
+  let payload = {};
+  try {
+    payload = JSON.parse(row.payload);
+  } catch (error) {
+    payload = {};
+  }
+  const days = normalizeTemplatePayload(payload);
+  return {
+    id: row.id,
+    name: row.name,
+    days,
+    ...templateStats(days),
+    creatorId: row.created_by,
+    creatorName: row.creator_name || "已离开的成员",
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+async function getTemplates(env, kitchenId) {
+  const rows = await all(
+    env,
+    `SELECT t.id, t.name, t.payload, t.created_by, t.created_at, t.updated_at,
+            u.display_name AS creator_name
+     FROM week_templates t
+     LEFT JOIN users u ON u.id = t.created_by
+     WHERE t.kitchen_id = ?
+     ORDER BY t.created_at DESC
+     LIMIT 60`,
+    kitchenId,
+  );
+  return rows.map(mapTemplate);
+}
+
+async function getTemplate(env, kitchenId, templateId) {
+  const row = await one(
+    env,
+    `SELECT t.id, t.name, t.payload, t.created_by, t.created_at, t.updated_at,
+            u.display_name AS creator_name
+     FROM week_templates t
+     LEFT JOIN users u ON u.id = t.created_by
+     WHERE t.id = ? AND t.kitchen_id = ?`,
+    templateId,
+    kitchenId,
+  );
+  return row ? mapTemplate(row) : null;
+}
+
+async function maxPositionsForWeek(env, kitchenId, weekStart) {
+  const dates = weekDateKeys(weekStart);
+  const rows = await all(
+    env,
+    `SELECT date, meal, MAX(position) AS max_position
+     FROM plan_items
+     WHERE kitchen_id = ? AND date >= ? AND date <= ?
+     GROUP BY date, meal`,
+    kitchenId,
+    dates[0],
+    dates[6],
+  );
+  return new Map(rows.map((row) => [`${row.date}|${row.meal}`, Number(row.max_position) + 1]));
+}
+
+function planItemStatement(env, kitchenId, userId, date, meal, item, position) {
+  const createdAt = nowISO();
+  return env.DB.prepare(
+    `INSERT INTO plan_items
+      (id, kitchen_id, date, meal, name, calories, position, created_by, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).bind(newId("itm"), kitchenId, date, meal, item.name, item.calories, position, userId, createdAt, createdAt);
+}
+
+async function runStatements(env, statements) {
+  for (let index = 0; index < statements.length; index += 60) {
+    await env.DB.batch(statements.slice(index, index + 60));
+  }
+}
+
+async function copyPlanWeek(env, kitchenId, userId, sourceWeekStart, targetWeekStart, mode) {
+  const rows = await readWeekItems(env, kitchenId, sourceWeekStart);
+  if (!rows.length) throw new HttpError(400, "上一周还没有安排食物，没有可以复制的食谱。");
+  const payload = weekPayloadFromRows(rows, sourceWeekStart);
+  const targetDates = weekDateKeys(targetWeekStart);
+  const statements = [];
+  if (mode === "replace") {
+    statements.push(
+      env.DB.prepare("DELETE FROM plan_items WHERE kitchen_id = ? AND date >= ? AND date <= ?").bind(
+        kitchenId,
+        targetDates[0],
+        targetDates[6],
+      ),
+    );
+  }
+  const positions = mode === "replace" ? new Map() : await maxPositionsForWeek(env, kitchenId, targetWeekStart);
+  let copied = 0;
+  payload.days.forEach((day, dayIndex) => {
+    Object.entries(day).forEach(([meal, items]) => {
+      items.forEach((item) => {
+        const key = `${targetDates[dayIndex]}|${meal}`;
+        const position = positions.get(key) || 0;
+        statements.push(planItemStatement(env, kitchenId, userId, targetDates[dayIndex], meal, item, position));
+        positions.set(key, position + 1);
+        copied += 1;
+      });
+    });
+  });
+  await runStatements(env, statements);
+  return copied;
+}
+
+async function applyWeekPayload(env, kitchenId, userId, weekStart, days, mode) {
+  const targetDates = weekDateKeys(weekStart);
+  const statements = [];
+  if (mode === "replace") {
+    statements.push(
+      env.DB.prepare("DELETE FROM plan_items WHERE kitchen_id = ? AND date >= ? AND date <= ?").bind(
+        kitchenId,
+        targetDates[0],
+        targetDates[6],
+      ),
+    );
+  }
+  const positions = mode === "replace" ? new Map() : await maxPositionsForWeek(env, kitchenId, weekStart);
+  let applied = 0;
+  days.forEach((day, dayIndex) => {
+    Object.entries(day).forEach(([meal, items]) => {
+      items.forEach((item) => {
+        const key = `${targetDates[dayIndex]}|${meal}`;
+        const position = positions.get(key) || 0;
+        statements.push(planItemStatement(env, kitchenId, userId, targetDates[dayIndex], meal, item, position));
+        positions.set(key, position + 1);
+        applied += 1;
+      });
+    });
+  });
+  await runStatements(env, statements);
+  return applied;
+}
+
+function mapFavorite(row) {
+  let items = [];
+  try {
+    const parsed = JSON.parse(row.items);
+    if (Array.isArray(parsed)) {
+      items = parsed
+        .map((item) => ({
+          name: cleanText(item?.name, 40),
+          calories: Math.round(Number(item?.calories)),
+        }))
+        .filter((item) => item.name && Number.isFinite(item.calories) && item.calories >= 0 && item.calories <= 5000);
+    }
+  } catch (error) {
+    items = [];
+  }
+  return {
+    id: row.id,
+    name: row.name,
+    meal: row.meal,
+    items,
+    totalCalories: items.reduce((total, item) => total + item.calories, 0),
+    creatorId: row.created_by,
+    creatorName: row.creator_name || "已离开的成员",
+    createdAt: row.created_at,
+  };
+}
+
+async function getFavorites(env, kitchenId) {
+  const rows = await all(
+    env,
+    `SELECT f.id, f.name, f.meal, f.items, f.created_by, f.created_at,
+            u.display_name AS creator_name
+     FROM meal_favorites f
+     LEFT JOIN users u ON u.id = f.created_by
+     WHERE f.kitchen_id = ?
+     ORDER BY f.created_at DESC
+     LIMIT 100`,
+    kitchenId,
+  );
+  return rows.map(mapFavorite);
+}
+
+async function getFavorite(env, kitchenId, favoriteId) {
+  const row = await one(
+    env,
+    `SELECT f.id, f.name, f.meal, f.items, f.created_by, f.created_at,
+            u.display_name AS creator_name
+     FROM meal_favorites f
+     LEFT JOIN users u ON u.id = f.created_by
+     WHERE f.id = ? AND f.kitchen_id = ?`,
+    favoriteId,
+    kitchenId,
+  );
+  return row ? mapFavorite(row) : null;
+}
+
+async function getCooks(env, kitchenId, startDate, endDate) {
+  const rows = await all(
+    env,
+    `SELECT c.date, c.user_id, c.updated_at, u.display_name
+     FROM day_cooks c
+     LEFT JOIN users u ON u.id = c.user_id
+     WHERE c.kitchen_id = ? AND c.date >= ? AND c.date <= ?
+     ORDER BY c.date ASC`,
+    kitchenId,
+    startDate,
+    endDate,
+  );
+  const cooks = {};
+  rows.forEach((row) => {
+    cooks[row.date] = {
+      date: row.date,
+      userId: row.user_id,
+      displayName: row.display_name || "已离开的成员",
+      updatedAt: row.updated_at,
+    };
+  });
+  return cooks;
+}
+
+async function getMemberRecord(env, kitchenId, userId) {
+  return one(
+    env,
+    `SELECT u.id, u.username, u.display_name
+     FROM memberships m JOIN users u ON u.id = m.user_id
+     WHERE m.kitchen_id = ? AND m.user_id = ?`,
+    kitchenId,
+    userId,
+  );
+}
+
+async function getGroceries(env, kitchenId, weekStart) {
+  const rows = await all(
+    env,
+    `SELECT g.id, g.week_start, g.day_index, g.user_id, g.note, g.done,
+            g.created_by, g.created_at, g.updated_at,
+            u.display_name AS user_name
+     FROM grocery_duties g
+     LEFT JOIN users u ON u.id = g.user_id
+     WHERE g.kitchen_id = ? AND g.week_start = ?
+     ORDER BY COALESCE(g.day_index, 7) ASC, g.created_at ASC`,
+    kitchenId,
+    weekStart,
+  );
+  return rows.map((row) => ({
+    id: row.id,
+    weekStart: row.week_start,
+    dayIndex: row.day_index === null ? null : Number(row.day_index),
+    userId: row.user_id,
+    userName: row.user_name || "已离开的成员",
+    note: row.note,
+    done: Boolean(row.done),
+    createdBy: row.created_by,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }));
+}
+
+async function getPolls(env, kitchenId, userId) {
+  const rows = await all(
+    env,
+    `SELECT p.id, p.title, p.note, p.status, p.created_by, p.created_at,
+            p.updated_at, p.closed_at, u.display_name AS creator_name
+     FROM meal_polls p
+     LEFT JOIN users u ON u.id = p.created_by
+     WHERE p.kitchen_id = ?
+     ORDER BY CASE p.status WHEN 'open' THEN 0 ELSE 1 END, p.created_at DESC
+     LIMIT 40`,
+    kitchenId,
+  );
+  if (!rows.length) return [];
+
+  const optionRows = await all(
+    env,
+    `SELECT o.id, o.poll_id, o.label, o.position
+     FROM poll_options o
+     JOIN meal_polls p ON p.id = o.poll_id
+     WHERE p.kitchen_id = ?
+     ORDER BY o.position ASC`,
+    kitchenId,
+  );
+  const optionsByPoll = new Map();
+  optionRows.forEach((row) => {
+    if (!optionsByPoll.has(row.poll_id)) optionsByPoll.set(row.poll_id, []);
+    optionsByPoll.get(row.poll_id).push({ id: row.id, label: row.label, voters: [] });
+  });
+
+  const voteRows = await all(
+    env,
+    `SELECT v.poll_id, v.option_id, v.user_id, u.display_name
+     FROM poll_votes v
+     JOIN poll_options o ON o.id = v.option_id
+     JOIN meal_polls p ON p.id = v.poll_id
+     JOIN users u ON u.id = v.user_id
+     WHERE p.kitchen_id = ?
+     ORDER BY v.created_at ASC`,
+    kitchenId,
+  );
+  const myVotes = new Map();
+  voteRows.forEach((row) => {
+    const option = (optionsByPoll.get(row.poll_id) || []).find((item) => item.id === row.option_id);
+    if (option) option.voters.push({ id: row.user_id, displayName: row.display_name });
+    if (row.user_id === userId) myVotes.set(row.poll_id, row.option_id);
+  });
+
+  return rows.map((row) => {
+    const options = (optionsByPoll.get(row.id) || []).map((option) => ({
+      ...option,
+      count: option.voters.length,
+    }));
+    return {
+      id: row.id,
+      title: row.title,
+      note: row.note,
+      status: row.status,
+      createdBy: row.created_by,
+      creatorName: row.creator_name || "已离开的成员",
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      closedAt: row.closed_at,
+      options,
+      totalVotes: options.reduce((total, option) => total + option.count, 0),
+      myVoteOptionId: myVotes.get(row.id) || null,
+    };
+  });
+}
+
+async function getGathering(env, kitchenId, userId, weekStart) {
+  const kitchen = await requireMembership(env, kitchenId, userId);
+  const normalized = normalizeWeekStart(weekStart);
+  const dates = weekDateKeys(normalized);
+  return {
+    weekStart: normalized,
+    canEdit: kitchen.role !== "viewer",
+    role: kitchen.role,
+    members: await getMembers(env, kitchenId),
+    cooks: await getCooks(env, kitchenId, dates[0], dates[6]),
+    groceries: await getGroceries(env, kitchenId, normalized),
+    polls: await getPolls(env, kitchenId, userId),
+    messages: await getMessages(env, kitchenId),
+  };
+}
+
+async function requirePoll(env, kitchenId, pollId) {
+  const poll = await one(
+    env,
+    "SELECT id, kitchen_id, title, status, created_by FROM meal_polls WHERE id = ? AND kitchen_id = ?",
+    pollId,
+    kitchenId,
+  );
+  if (!poll) throw new HttpError(404, "这个投票已经不存在了。");
+  return poll;
+}
+
+function canManagePoll(poll, kitchen, userId) {
+  return poll.created_by === userId || kitchen.role === "owner";
+}
+
+async function handleCopyWeek(request, env, user, kitchenId) {
+  if (!user) throw new HttpError(401, "请先登录。");
+  await requireMembership(env, kitchenId, user.id, { edit: true });
+  const body = await readJson(request);
+  const sourceWeekStart = normalizeWeekStart(body.sourceWeekStart);
+  const targetWeekStart = normalizeWeekStart(body.targetWeekStart);
+  if (sourceWeekStart === targetWeekStart) throw new HttpError(400, "来源周和本周是同一周，换一周再复制吧。");
+  const mode = body.mode === "replace" ? "replace" : "merge";
+  const copied = await copyPlanWeek(env, kitchenId, user.id, sourceWeekStart, targetWeekStart, mode);
+  await touchKitchen(env, kitchenId, { clearSample: true });
+  return json({ copied, mode, plan: await getPlan(env, kitchenId, user.id, targetWeekStart) });
+}
+
+async function handleGetTemplates(env, user, kitchenId) {
+  if (!user) throw new HttpError(401, "请先登录。");
+  await requireMembership(env, kitchenId, user.id);
+  return json({ templates: await getTemplates(env, kitchenId) });
+}
+
+async function handleCreateTemplate(request, env, user, kitchenId) {
+  if (!user) throw new HttpError(401, "请先登录。");
+  await requireMembership(env, kitchenId, user.id, { edit: true });
+  const body = await readJson(request);
+  const weekStart = normalizeWeekStart(body.weekStart || dateKey(startOfWeek(new Date())));
+  const rows = await readWeekItems(env, kitchenId, weekStart);
+  if (!rows.length) throw new HttpError(400, "这一周还没有安排食物，先加点菜再存模板吧。");
+  const name = cleanText(body.name, 30) || `${weekStart.slice(5).replace("-", "/")} 的一周`;
+  const count = await one(env, "SELECT COUNT(*) AS count FROM week_templates WHERE kitchen_id = ?", kitchenId);
+  if (Number(count?.count || 0) >= 60) throw new HttpError(400, "模板太多了，先删掉一些再保存。");
+  const payload = weekPayloadFromRows(rows, weekStart);
+  const id = newId("tpl");
+  const createdAt = nowISO();
+  await run(
+    env,
+    `INSERT INTO week_templates (id, kitchen_id, name, payload, created_by, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    id,
+    kitchenId,
+    name,
+    JSON.stringify(payload),
+    user.id,
+    createdAt,
+    createdAt,
+  );
+  return json({ templates: await getTemplates(env, kitchenId) }, 201);
+}
+
+async function handleDeleteTemplate(env, user, kitchenId, templateId) {
+  if (!user) throw new HttpError(401, "请先登录。");
+  const kitchen = await requireMembership(env, kitchenId, user.id, { edit: true });
+  const template = await one(
+    env,
+    "SELECT id, created_by FROM week_templates WHERE id = ? AND kitchen_id = ?",
+    templateId,
+    kitchenId,
+  );
+  if (!template) throw new HttpError(404, "这个模板已经不存在了。");
+  if (template.created_by !== user.id && kitchen.role !== "owner") {
+    throw new HttpError(403, "只有模板的保存者或厨房主人可以删除这个模板。");
+  }
+  await run(env, "DELETE FROM week_templates WHERE id = ?", templateId);
+  return json({ templates: await getTemplates(env, kitchenId) });
+}
+
+async function handleApplyTemplate(request, env, user, kitchenId, templateId) {
+  if (!user) throw new HttpError(401, "请先登录。");
+  await requireMembership(env, kitchenId, user.id, { edit: true });
+  const body = await readJson(request);
+  const weekStart = normalizeWeekStart(body.weekStart);
+  const mode = body.mode === "replace" ? "replace" : "merge";
+  const template = await getTemplate(env, kitchenId, templateId);
+  if (!template) throw new HttpError(404, "这个模板已经不存在了。");
+  if (!template.itemCount) throw new HttpError(400, "这个模板是空的，先保存一份有内容的模板吧。");
+  const applied = await applyWeekPayload(env, kitchenId, user.id, weekStart, template.days, mode);
+  await touchKitchen(env, kitchenId, { clearSample: true });
+  return json({ applied, mode, plan: await getPlan(env, kitchenId, user.id, weekStart) });
+}
+
+async function handleGetFavorites(env, user, kitchenId) {
+  if (!user) throw new HttpError(401, "请先登录。");
+  await requireMembership(env, kitchenId, user.id);
+  return json({ favorites: await getFavorites(env, kitchenId) });
+}
+
+async function handleCreateFavorite(request, env, user, kitchenId) {
+  if (!user) throw new HttpError(401, "请先登录。");
+  await requireMembership(env, kitchenId, user.id, { edit: true });
+  const body = await readJson(request);
+  const date = String(body.date || "");
+  const meal = String(body.meal || "");
+  if (!parseDateKey(date)) throw new HttpError(400, "日期格式不正确。");
+  if (!MEALS.includes(meal)) throw new HttpError(400, "餐次不正确。");
+  const items = await all(
+    env,
+    `SELECT name, calories FROM plan_items
+     WHERE kitchen_id = ? AND date = ? AND meal = ?
+     ORDER BY position ASC, created_at ASC`,
+    kitchenId,
+    date,
+    meal,
+  );
+  if (!items.length) throw new HttpError(400, "这一餐还是空的，先安排点食物再收藏吧。");
+  const count = await one(env, "SELECT COUNT(*) AS count FROM meal_favorites WHERE kitchen_id = ?", kitchenId);
+  if (Number(count?.count || 0) >= 100) throw new HttpError(400, "收藏太多了，先整理一下吧。");
+  const name = cleanText(body.name, 30) || `${MEAL_LABELS[meal]} · ${items[0].name}`;
+  await run(
+    env,
+    `INSERT INTO meal_favorites (id, kitchen_id, name, meal, items, created_by, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    newId("fav"),
+    kitchenId,
+    name,
+    meal,
+    JSON.stringify(items.map((item) => ({ name: item.name, calories: item.calories }))),
+    user.id,
+    nowISO(),
+  );
+  return json({ favorites: await getFavorites(env, kitchenId) }, 201);
+}
+
+async function handleDeleteFavorite(env, user, kitchenId, favoriteId) {
+  if (!user) throw new HttpError(401, "请先登录。");
+  const kitchen = await requireMembership(env, kitchenId, user.id, { edit: true });
+  const favorite = await one(
+    env,
+    "SELECT id, created_by FROM meal_favorites WHERE id = ? AND kitchen_id = ?",
+    favoriteId,
+    kitchenId,
+  );
+  if (!favorite) throw new HttpError(404, "这个收藏已经不存在了。");
+  if (favorite.created_by !== user.id && kitchen.role !== "owner") {
+    throw new HttpError(403, "只有收藏者或厨房主人可以删除这个收藏。");
+  }
+  await run(env, "DELETE FROM meal_favorites WHERE id = ?", favoriteId);
+  return json({ favorites: await getFavorites(env, kitchenId) });
+}
+
+async function handleApplyFavorite(request, env, user, kitchenId, favoriteId) {
+  if (!user) throw new HttpError(401, "请先登录。");
+  await requireMembership(env, kitchenId, user.id, { edit: true });
+  const body = await readJson(request);
+  const weekStart = normalizeWeekStart(body.weekStart);
+  const date = String(body.date || "");
+  const meal = String(body.meal || "");
+  const dates = weekDateKeys(weekStart);
+  if (!parseDateKey(date) || !dates.includes(date)) throw new HttpError(400, "日期不在当前周内。");
+  if (!MEALS.includes(meal)) throw new HttpError(400, "餐次不正确。");
+  const favorite = await getFavorite(env, kitchenId, favoriteId);
+  if (!favorite) throw new HttpError(404, "这个收藏已经不存在了。");
+  if (!favorite.items.length) throw new HttpError(400, "这个收藏是空的。");
+  const positions = await maxPositionsForWeek(env, kitchenId, weekStart);
+  const key = `${date}|${meal}`;
+  let position = positions.get(key) || 0;
+  const statements = [];
+  favorite.items.forEach((item) => {
+    statements.push(planItemStatement(env, kitchenId, user.id, date, meal, item, position));
+    position += 1;
+  });
+  await runStatements(env, statements);
+  await touchKitchen(env, kitchenId, { clearSample: true });
+  return json({ added: favorite.items.length, plan: await getPlan(env, kitchenId, user.id, weekStart) });
+}
+
+async function handleSetCook(request, env, user, kitchenId, date) {
+  if (!user) throw new HttpError(401, "请先登录。");
+  await requireMembership(env, kitchenId, user.id, { edit: true });
+  if (!parseDateKey(date)) throw new HttpError(400, "日期格式不正确。");
+  const body = await readJson(request);
+  const member = await getMemberRecord(env, kitchenId, String(body.userId || ""));
+  if (!member) throw new HttpError(400, "请选择一位当前厨房的成员。");
+  await run(
+    env,
+    `INSERT INTO day_cooks (kitchen_id, date, user_id, assigned_by, updated_at)
+     VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT(kitchen_id, date)
+     DO UPDATE SET user_id = excluded.user_id, assigned_by = excluded.assigned_by, updated_at = excluded.updated_at`,
+    kitchenId,
+    date,
+    member.id,
+    user.id,
+    nowISO(),
+  );
+  const weekStart = dateKey(startOfWeek(parseDateKey(date)));
+  const weekDates = weekDateKeys(weekStart);
+  return json({ weekStart, cooks: await getCooks(env, kitchenId, weekDates[0], weekDates[6]) });
+}
+
+async function handleClearCook(env, user, kitchenId, date) {
+  if (!user) throw new HttpError(401, "请先登录。");
+  await requireMembership(env, kitchenId, user.id, { edit: true });
+  if (!parseDateKey(date)) throw new HttpError(400, "日期格式不正确。");
+  await run(env, "DELETE FROM day_cooks WHERE kitchen_id = ? AND date = ?", kitchenId, date);
+  const weekStart = dateKey(startOfWeek(parseDateKey(date)));
+  const weekDates = weekDateKeys(weekStart);
+  return json({ weekStart, cooks: await getCooks(env, kitchenId, weekDates[0], weekDates[6]) });
+}
+
+async function handleGetGathering(env, user, kitchenId, url) {
+  if (!user) throw new HttpError(401, "请先登录。");
+  return json(await getGathering(env, kitchenId, user.id, url.searchParams.get("weekStart")));
+}
+
+async function handleCreateGrocery(request, env, user, kitchenId) {
+  if (!user) throw new HttpError(401, "请先登录。");
+  await requireMembership(env, kitchenId, user.id, { edit: true });
+  const body = await readJson(request);
+  const weekStart = normalizeWeekStart(body.weekStart);
+  const member = await getMemberRecord(env, kitchenId, String(body.userId || ""));
+  if (!member) throw new HttpError(400, "请选择一位当前厨房的成员。");
+  let dayIndex = null;
+  if (body.dayIndex !== null && body.dayIndex !== undefined && body.dayIndex !== "") {
+    dayIndex = Number(body.dayIndex);
+    if (!Number.isInteger(dayIndex) || dayIndex < 0 || dayIndex > 6) {
+      throw new HttpError(400, "请选择本周内的某一天。");
+    }
+  }
+  const note = cleanText(body.note, 60);
+  const count = await one(
+    env,
+    "SELECT COUNT(*) AS count FROM grocery_duties WHERE kitchen_id = ? AND week_start = ?",
+    kitchenId,
+    weekStart,
+  );
+  if (Number(count?.count || 0) >= 20) throw new HttpError(400, "这一周的买菜安排已经很多了。");
+  const createdAt = nowISO();
+  await run(
+    env,
+    `INSERT INTO grocery_duties
+      (id, kitchen_id, week_start, day_index, user_id, note, done, created_by, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?)`,
+    newId("buy"),
+    kitchenId,
+    weekStart,
+    dayIndex,
+    member.id,
+    note,
+    user.id,
+    createdAt,
+    createdAt,
+  );
+  return json({ groceries: await getGroceries(env, kitchenId, weekStart) }, 201);
+}
+
+async function handleUpdateGrocery(request, env, user, kitchenId, groceryId) {
+  if (!user) throw new HttpError(401, "请先登录。");
+  const kitchen = await requireMembership(env, kitchenId, user.id);
+  const duty = await one(env, "SELECT * FROM grocery_duties WHERE id = ? AND kitchen_id = ?", groceryId, kitchenId);
+  if (!duty) throw new HttpError(404, "这项买菜安排已经不存在了。");
+  const body = await readJson(request);
+  const keys = Object.keys(body);
+  const onlyDone = keys.length === 1 && keys[0] === "done";
+  const canToggleOwn = onlyDone && duty.user_id === user.id;
+  if (kitchen.role === "viewer" && !canToggleOwn) {
+    throw new HttpError(403, "你是观看者，只能更新自己负责的买菜进度。");
+  }
+  let userId = duty.user_id;
+  if (Object.prototype.hasOwnProperty.call(body, "userId")) {
+    const member = await getMemberRecord(env, kitchenId, String(body.userId || ""));
+    if (!member) throw new HttpError(400, "请选择一位当前厨房的成员。");
+    userId = member.id;
+  }
+  let dayIndex = duty.day_index === null ? null : Number(duty.day_index);
+  if (Object.prototype.hasOwnProperty.call(body, "dayIndex")) {
+    if (body.dayIndex === null || body.dayIndex === "") {
+      dayIndex = null;
+    } else {
+      dayIndex = Number(body.dayIndex);
+      if (!Number.isInteger(dayIndex) || dayIndex < 0 || dayIndex > 6) {
+        throw new HttpError(400, "请选择本周内的某一天。");
+      }
+    }
+  }
+  const note = Object.prototype.hasOwnProperty.call(body, "note") ? cleanText(body.note, 60) : duty.note;
+  const done = Object.prototype.hasOwnProperty.call(body, "done") ? (body.done ? 1 : 0) : duty.done;
+  await run(
+    env,
+    `UPDATE grocery_duties
+     SET user_id = ?, day_index = ?, note = ?, done = ?, updated_at = ?
+     WHERE id = ? AND kitchen_id = ?`,
+    userId,
+    dayIndex,
+    note,
+    done,
+    nowISO(),
+    groceryId,
+    kitchenId,
+  );
+  return json({ groceries: await getGroceries(env, kitchenId, duty.week_start) });
+}
+
+async function handleDeleteGrocery(env, user, kitchenId, groceryId) {
+  if (!user) throw new HttpError(401, "请先登录。");
+  await requireMembership(env, kitchenId, user.id, { edit: true });
+  const duty = await one(
+    env,
+    "SELECT id, week_start FROM grocery_duties WHERE id = ? AND kitchen_id = ?",
+    groceryId,
+    kitchenId,
+  );
+  if (!duty) throw new HttpError(404, "这项买菜安排已经不存在了。");
+  await run(env, "DELETE FROM grocery_duties WHERE id = ?", groceryId);
+  return json({ groceries: await getGroceries(env, kitchenId, duty.week_start) });
+}
+
+async function handleCreatePoll(request, env, user, kitchenId) {
+  if (!user) throw new HttpError(401, "请先登录。");
+  await requireMembership(env, kitchenId, user.id);
+  const body = await readJson(request);
+  const title = cleanText(body.title, 40);
+  if (!title) throw new HttpError(400, "给投票起个标题吧。");
+  const note = cleanText(body.note, 120);
+  const rawOptions = Array.isArray(body.options) ? body.options : [];
+  const seen = new Set();
+  const options = [];
+  rawOptions.forEach((value) => {
+    const label = cleanText(value, 30);
+    if (!label || seen.has(label)) return;
+    seen.add(label);
+    options.push(label);
+  });
+  if (options.length < 2) throw new HttpError(400, "至少需要两个不同的选项。");
+  if (options.length > 6) throw new HttpError(400, "最多只能有六个选项。");
+  const open = await one(
+    env,
+    "SELECT COUNT(*) AS count FROM meal_polls WHERE kitchen_id = ? AND status = 'open'",
+    kitchenId,
+  );
+  if (Number(open?.count || 0) >= 12) throw new HttpError(400, "进行中的投票太多了，先结束一些吧。");
+  const id = newId("poll");
+  const createdAt = nowISO();
+  const statements = [
+    env.DB.prepare(
+      `INSERT INTO meal_polls (id, kitchen_id, title, note, status, created_by, created_at, updated_at)
+       VALUES (?, ?, ?, ?, 'open', ?, ?, ?)`,
+    ).bind(id, kitchenId, title, note, user.id, createdAt, createdAt),
+  ];
+  options.forEach((label, index) => {
+    statements.push(
+      env.DB.prepare("INSERT INTO poll_options (id, poll_id, label, position) VALUES (?, ?, ?, ?)").bind(
+        newId("opt"),
+        id,
+        label,
+        index,
+      ),
+    );
+  });
+  await env.DB.batch(statements);
+  return json({ polls: await getPolls(env, kitchenId, user.id), pollId: id }, 201);
+}
+
+async function handleVotePoll(request, env, user, kitchenId, pollId) {
+  if (!user) throw new HttpError(401, "请先登录。");
+  await requireMembership(env, kitchenId, user.id);
+  const poll = await requirePoll(env, kitchenId, pollId);
+  if (poll.status !== "open") throw new HttpError(400, "这个投票已经结束了。");
+  const body = await readJson(request);
+  const optionId = String(body.optionId || "");
+  const option = await one(
+    env,
+    "SELECT id FROM poll_options WHERE id = ? AND poll_id = ?",
+    optionId,
+    pollId,
+  );
+  if (!option) throw new HttpError(400, "这个选项不存在。");
+  await run(
+    env,
+    `INSERT INTO poll_votes (poll_id, option_id, user_id, created_at)
+     VALUES (?, ?, ?, ?)
+     ON CONFLICT(poll_id, user_id)
+     DO UPDATE SET option_id = excluded.option_id, created_at = excluded.created_at`,
+    pollId,
+    optionId,
+    user.id,
+    nowISO(),
+  );
+  await run(env, "UPDATE meal_polls SET updated_at = ? WHERE id = ?", nowISO(), pollId);
+  return json({ polls: await getPolls(env, kitchenId, user.id) });
+}
+
+async function handleSetPollStatus(env, user, kitchenId, pollId, status) {
+  if (!user) throw new HttpError(401, "请先登录。");
+  const kitchen = await requireMembership(env, kitchenId, user.id);
+  const poll = await requirePoll(env, kitchenId, pollId);
+  if (!canManagePoll(poll, kitchen, user.id)) {
+    throw new HttpError(403, "只有发起人或厨房主人可以结束这个投票。");
+  }
+  await run(
+    env,
+    "UPDATE meal_polls SET status = ?, updated_at = ?, closed_at = ? WHERE id = ?",
+    status,
+    nowISO(),
+    status === "closed" ? nowISO() : null,
+    pollId,
+  );
+  return json({ polls: await getPolls(env, kitchenId, user.id) });
+}
+
+async function handleDeletePoll(env, user, kitchenId, pollId) {
+  if (!user) throw new HttpError(401, "请先登录。");
+  const kitchen = await requireMembership(env, kitchenId, user.id);
+  const poll = await requirePoll(env, kitchenId, pollId);
+  if (!canManagePoll(poll, kitchen, user.id)) {
+    throw new HttpError(403, "只有发起人或厨房主人可以删除这个投票。");
+  }
+  await run(env, "DELETE FROM meal_polls WHERE id = ?", pollId);
+  return json({ polls: await getPolls(env, kitchenId, user.id) });
 }
 
 /* =========================================================
@@ -1523,6 +2364,13 @@ async function adminKitchenDetail(env, kitchenId) {
 
 async function deleteKitchenData(env, kitchenId) {
   await env.DB.batch([
+    env.DB.prepare("DELETE FROM poll_votes WHERE poll_id IN (SELECT id FROM meal_polls WHERE kitchen_id = ?)").bind(kitchenId),
+    env.DB.prepare("DELETE FROM poll_options WHERE poll_id IN (SELECT id FROM meal_polls WHERE kitchen_id = ?)").bind(kitchenId),
+    env.DB.prepare("DELETE FROM meal_polls WHERE kitchen_id = ?").bind(kitchenId),
+    env.DB.prepare("DELETE FROM grocery_duties WHERE kitchen_id = ?").bind(kitchenId),
+    env.DB.prepare("DELETE FROM day_cooks WHERE kitchen_id = ?").bind(kitchenId),
+    env.DB.prepare("DELETE FROM meal_favorites WHERE kitchen_id = ?").bind(kitchenId),
+    env.DB.prepare("DELETE FROM week_templates WHERE kitchen_id = ?").bind(kitchenId),
     env.DB.prepare("DELETE FROM plan_items WHERE kitchen_id = ?").bind(kitchenId),
     env.DB.prepare("DELETE FROM ingredients WHERE kitchen_id = ?").bind(kitchenId),
     env.DB.prepare("DELETE FROM invites WHERE kitchen_id = ?").bind(kitchenId),
@@ -1579,6 +2427,7 @@ async function handleAdminApi(request, env, url, user) {
     const owned = await all(env, "SELECT id FROM kitchens WHERE owner_id = ?", target.id);
     for (const kitchen of owned) await deleteKitchenData(env, kitchen.id);
     await env.DB.batch([
+      env.DB.prepare("DELETE FROM poll_votes WHERE user_id = ?").bind(target.id),
       env.DB.prepare("DELETE FROM invites WHERE created_by = ?").bind(target.id),
       env.DB.prepare("DELETE FROM memberships WHERE user_id = ?").bind(target.id),
       env.DB.prepare("DELETE FROM sessions WHERE user_id = ?").bind(target.id),
@@ -1706,6 +2555,92 @@ async function handleRequest(request, env) {
   if (match) {
     if (method === "PATCH") return handleUpdatePlanItem(request, env, user, match[1], match[2]);
     if (method === "DELETE") return handleDeletePlanItem(env, user, match[1], match[2], url);
+  }
+
+  match = pathname.match(/^\/api\/kitchens\/([A-Za-z0-9_]+)\/plan\/copy$/);
+  if (match && method === "POST") {
+    return handleCopyWeek(request, env, user, match[1]);
+  }
+
+  match = pathname.match(/^\/api\/kitchens\/([A-Za-z0-9_]+)\/templates$/);
+  if (match) {
+    if (method === "GET") return handleGetTemplates(env, user, match[1]);
+    if (method === "POST") return handleCreateTemplate(request, env, user, match[1]);
+  }
+
+  match = pathname.match(/^\/api\/kitchens\/([A-Za-z0-9_]+)\/templates\/([A-Za-z0-9_]+)\/apply$/);
+  if (match && method === "POST") {
+    return handleApplyTemplate(request, env, user, match[1], match[2]);
+  }
+
+  match = pathname.match(/^\/api\/kitchens\/([A-Za-z0-9_]+)\/templates\/([A-Za-z0-9_]+)$/);
+  if (match && method === "DELETE") {
+    return handleDeleteTemplate(env, user, match[1], match[2]);
+  }
+
+  match = pathname.match(/^\/api\/kitchens\/([A-Za-z0-9_]+)\/favorites$/);
+  if (match) {
+    if (method === "GET") return handleGetFavorites(env, user, match[1]);
+    if (method === "POST") return handleCreateFavorite(request, env, user, match[1]);
+  }
+
+  match = pathname.match(/^\/api\/kitchens\/([A-Za-z0-9_]+)\/favorites\/([A-Za-z0-9_]+)\/apply$/);
+  if (match && method === "POST") {
+    return handleApplyFavorite(request, env, user, match[1], match[2]);
+  }
+
+  match = pathname.match(/^\/api\/kitchens\/([A-Za-z0-9_]+)\/favorites\/([A-Za-z0-9_]+)$/);
+  if (match && method === "DELETE") {
+    return handleDeleteFavorite(env, user, match[1], match[2]);
+  }
+
+  match = pathname.match(/^\/api\/kitchens\/([A-Za-z0-9_]+)\/cooks\/(\d{4}-\d{2}-\d{2})$/);
+  if (match) {
+    if (method === "PUT") return handleSetCook(request, env, user, match[1], match[2]);
+    if (method === "DELETE") return handleClearCook(env, user, match[1], match[2]);
+  }
+
+  match = pathname.match(/^\/api\/kitchens\/([A-Za-z0-9_]+)\/groceries$/);
+  if (match) {
+    if (method === "GET") return handleGetGathering(env, user, match[1], url);
+    if (method === "POST") return handleCreateGrocery(request, env, user, match[1]);
+  }
+
+  match = pathname.match(/^\/api\/kitchens\/([A-Za-z0-9_]+)\/groceries\/([A-Za-z0-9_]+)$/);
+  if (match) {
+    if (method === "PATCH") return handleUpdateGrocery(request, env, user, match[1], match[2]);
+    if (method === "DELETE") return handleDeleteGrocery(env, user, match[1], match[2]);
+  }
+
+  match = pathname.match(/^\/api\/kitchens\/([A-Za-z0-9_]+)\/polls$/);
+  if (match) {
+    if (method === "GET") return handleGetGathering(env, user, match[1], url);
+    if (method === "POST") return handleCreatePoll(request, env, user, match[1]);
+  }
+
+  match = pathname.match(/^\/api\/kitchens\/([A-Za-z0-9_]+)\/polls\/([A-Za-z0-9_]+)\/vote$/);
+  if (match && method === "POST") {
+    return handleVotePoll(request, env, user, match[1], match[2]);
+  }
+
+  match = pathname.match(/^\/api\/kitchens\/([A-Za-z0-9_]+)\/polls\/([A-Za-z0-9_]+)\/close$/);
+  if (match && method === "POST") {
+    return handleSetPollStatus(env, user, match[1], match[2], "closed");
+  }
+
+  match = pathname.match(/^\/api\/kitchens\/([A-Za-z0-9_]+)\/polls\/([A-Za-z0-9_]+)\/reopen$/);
+  if (match && method === "POST") {
+    return handleSetPollStatus(env, user, match[1], match[2], "open");
+  }
+
+  match = pathname.match(/^\/api\/kitchens\/([A-Za-z0-9_]+)\/polls\/([A-Za-z0-9_]+)$/);
+  if (match && method === "DELETE") {
+    return handleDeletePoll(env, user, match[1], match[2]);
+  }
+
+  match = pathname.match(/^\/api\/kitchens\/([A-Za-z0-9_]+)\/table$/);
+  if (match && method === "GET") {
+    return handleGetGathering(env, user, match[1], url);
   }
 
   match = pathname.match(/^\/api\/kitchens\/([A-Za-z0-9_]+)\/ingredients$/);

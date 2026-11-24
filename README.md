@@ -22,6 +22,25 @@
 - 添加食物时可以直接从食材库选择预设，名称和热量会自动填入。
 - 食材卡片可以快速「加入食谱」，选择本周的某一天和某一餐。
 
+### 复制周 / 收藏 / 模板
+
+- **复制上周食谱到本周**：在「一周食谱」点「复制上周食谱」，按相同的星期把上一周的食物追加到当前周，不覆盖已有安排。
+- **保存一周模板**：把当前周的 7 天安排存成厨房共享模板，并给模板起一个名字。
+- **一键套用模板**：在「模板与收藏」里套用任意模板，可选择「替换本周」或「追加到本周」。
+- **收藏常做的一餐**：点任意一餐右上角的星标，把整餐收藏为「常做的一餐」；下次选择日期和餐次即可加回食谱。
+
+![模板与收藏](preview-recipe-tools.png)
+
+### 饭局（谁做饭 / 用餐投票）
+
+- **指定掌勺的人**：给一周里的某一天指定做饭的人，安排会显示在「饭局」页和食谱的日卡片上。
+- **发起用餐投票**：例如「周末吃什么」，厨房成员每人一票，可以随时改票；发起人或厨房主人可以结束、重新开启或删除投票。
+- **记录谁负责买菜**：记下本周的采购负责人、哪天去、要买什么；买完可以勾选完成。
+- **留言板**：给厨房成员留话、分享今天的安排；留言板已经并入饭局页，不再单独占用导航。
+- 观看者也可以参与投票、留言，并勾选自己负责的买菜任务，但不能修改食谱或管理饭局安排。
+
+![饭局](preview-table.png)
+
 ### 登录与账号
 
 - 用户名 + 密码注册 / 登录，密码使用 Node.js `scrypt` 加盐哈希保存。
@@ -35,10 +54,10 @@
 - 每位用户都可以新建自己的厨房，并邀请朋友。
 - 三种身份，服务端强制校验：
   - **主人**：邀请朋友、管理成员、重命名厨房、编辑所有内容。
-  - **共建者**：编辑周食谱、管理食材库、修改每日目标。
-  - **观看者**：只能查看食谱、食材库和成员列表。
+  - **共建者**：编辑周食谱、管理食材库、修改每日目标，使用模板 / 收藏 / 饭局安排。
+  - **观看者**：查看食谱、食材库和成员列表；可以参与用餐投票，并更新自己负责的买菜进度。
 - 邀请链接默认 7 天有效，可邀请多人，可随时复制或撤回。
-- 通过 Server-Sent Events 实时同步：朋友添加食物、修改食材或成员身份后，你这边会自动刷新。
+- 通过 Server-Sent Events 实时同步：朋友添加食物、修改食材、安排掌勺或发起投票后，你这边会自动刷新。
 - 所有修改都先经过服务端权限校验，前端隐藏按钮只是体验层。
 
 ### 管理后台
@@ -94,7 +113,13 @@ HOST=0.0.0.0 PORT=4174 npm start
 
 Cloudflare 免费版不支持原来的 SSE 长连接，因此线上版本改为每 10 秒轮询同步；界面会显示「定时同步」。本地 Node 版本仍然使用 SSE 实时同步。
 
+> 模板、收藏、掌勺、投票和买菜功能新增了数据表。部署到线上前，请先执行
+> `npx wrangler d1 execute cougou-kitchen --remote --file=cloudflare/schema.sql`，
+> 否则食谱接口会读不到新增的掌勺表。
+
 维护和重新部署参考 [cloudflare/README.md](cloudflare/README.md)。项目仍保留 `Dockerfile`、`railway.json` 和 [DEPLOY.md](DEPLOY.md)，可以部署到支持持久卷的 Docker 平台。
+
+macOS 上可以直接双击项目根目录的 **`部署到Cloudflare.command`**：它会自动构建静态文件、检查 Cloudflare 登录、更新 D1 表结构并发布 Pages。第一次运行如果未登录，会自动打开浏览器授权。
 
 ### 管理员设置
 
@@ -152,6 +177,7 @@ ADMIN_USERNAME=用户名 npm start
 ├── railway.json            # Railway 部署配置
 ├── DEPLOY.md               # Northflank / Railway 部署指南
 ├── 启动厨房.command        # macOS 双击启动器
+├── 部署到Cloudflare.command # macOS 双击部署到 Cloudflare
 ├── README.md
 ├── preview-auth.png
 ├── preview-desktop.png
@@ -159,6 +185,8 @@ ADMIN_USERNAME=用户名 npm start
 ├── preview-ingredients.png
 ├── preview-kitchen.png
 ├── preview-admin.png
+├── preview-table.png
+├── preview-recipe-tools.png
 └── data/                   # 运行时生成的 SQLite 数据（不提交）
 ```
 
@@ -169,6 +197,7 @@ npm start                       # 启动服务
 PORT=5000 npm start
 HOST=0.0.0.0 npm start
 npm run make-admin -- 用户名     # 授权管理员
+./部署到Cloudflare.command       # 构建 + 更新 D1 + 发布 Pages
 ```
 
 ## 页面预览
@@ -176,6 +205,10 @@ npm run make-admin -- 用户名     # 授权管理员
 | 食材库 | 厨房 |
 | --- | --- |
 | ![食材库](preview-ingredients.png) | ![厨房](preview-kitchen.png) |
+
+| 饭局 | 模板与收藏 |
+| --- | --- |
+| ![饭局](preview-table.png) | ![模板与收藏](preview-recipe-tools.png) |
 
 移动端：
 
