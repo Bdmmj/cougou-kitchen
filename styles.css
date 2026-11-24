@@ -44,12 +44,14 @@
 html {
   scroll-behavior: smooth;
   color-scheme: light;
+  overscroll-behavior-x: none;
 }
 
 body {
   min-width: 320px;
   min-height: 100vh;
   margin: 0;
+  overscroll-behavior-x: none;
   color: var(--ink);
   font-family: var(--sans);
   font-size: 14px;

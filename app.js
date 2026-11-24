@@ -3121,7 +3121,9 @@
     }
 
     if (updateHash && location.hash !== `#/${view}`) {
-      location.hash = `#/${view}`;
+      // Replace instead of pushing history: on mobile, browser back/forward
+      // swipe gestures otherwise cycle through the main sections.
+      history.replaceState(null, "", `${location.pathname}#/${view}`);
     }
 
     if (state.kitchen) {
@@ -3145,15 +3147,7 @@
   function navigate(view) {
     if (!state.user) return;
     if (view === "planner" && isMobileBoard()) state.pendingPlannerJump = true;
-    if (state.view === view && location.hash === `#/${view}`) {
-      setView(view, { updateHash: false });
-      return;
-    }
-    if (location.hash !== `#/${view}`) {
-      location.hash = `#/${view}`;
-    } else {
-      setView(view, { updateHash: false });
-    }
+    setView(view, { updateHash: true });
     if (view === "kitchen" && state.kitchen) {
       refreshKitchenDetail();
     }
@@ -4599,6 +4593,14 @@
     document.querySelectorAll("[data-view]").forEach((button) => {
       button.addEventListener("click", () => navigate(button.dataset.view));
     });
+
+    const brandLink = document.querySelector(".site-header .brand");
+    if (brandLink) {
+      brandLink.addEventListener("click", (event) => {
+        event.preventDefault();
+        navigate("planner");
+      });
+    }
 
     dom.kitchenSwitch.addEventListener("click", toggleKitchenMenu);
     dom.userMenuButton.addEventListener("click", toggleUserMenu);
