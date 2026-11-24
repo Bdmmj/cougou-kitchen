@@ -50,9 +50,11 @@ npx wrangler d1 execute cougou-kitchen --remote --file=schema.sql
 ```
 
 > 模板、收藏、掌勺、用餐投票和买菜安排新增了 `week_templates`、`meal_favorites`、
-> `day_cooks`、`meal_polls`、`poll_options`、`poll_votes`、`grocery_duties` 等表。
+> `day_cooks`、`day_cook_slots`、`meal_polls`、`poll_options`、`poll_votes`、
+> `grocery_duties` 等表。掌勺已经从「一天一个人」拆成上午/下午两个时段，
+> schema 更新会把旧的 `day_cooks` 记录复制到两个时段，不会丢数据。
 > 更新这一版代码前必须先执行上面的 D1 schema 更新，否则食谱接口会因为缺少
-> `day_cooks` 表而报错。
+> `day_cook_slots` 表而报错。
 
 ## 说明
 

@@ -5,6 +5,7 @@
 
 const MEALS = ["breakfast", "lunch", "dinner", "snack"];
 const MEAL_LABELS = { breakfast: "早餐", lunch: "午餐", dinner: "晚餐", snack: "加餐" };
+const COOK_SLOTS = new Set(["morning", "afternoon"]);
 const INGREDIENT_CATEGORIES = new Set(["staple", "protein", "vegetable", "fruit", "drink", "other"]);
 const SESSION_COOKIE = "cougou_session";
 const SESSION_AGE = 60 * 60 * 24 * 30;
@@ -882,19 +883,21 @@ async function getFavorite(env, kitchenId, favoriteId) {
 async function getCooks(env, kitchenId, startDate, endDate) {
   const rows = await all(
     env,
-    `SELECT c.date, c.user_id, c.updated_at, u.display_name
-     FROM day_cooks c
+    `SELECT c.date, c.slot, c.user_id, c.updated_at, u.display_name
+     FROM day_cook_slots c
      LEFT JOIN users u ON u.id = c.user_id
      WHERE c.kitchen_id = ? AND c.date >= ? AND c.date <= ?
-     ORDER BY c.date ASC`,
+     ORDER BY c.date ASC, CASE c.slot WHEN 'morning' THEN 0 ELSE 1 END`,
     kitchenId,
     startDate,
     endDate,
   );
   const cooks = {};
   rows.forEach((row) => {
-    cooks[row.date] = {
+    if (!cooks[row.date]) cooks[row.date] = { morning: null, afternoon: null };
+    cooks[row.date][row.slot] = {
       date: row.date,
+      slot: row.slot,
       userId: row.user_id,
       displayName: row.display_name || "已离开的成员",
       updatedAt: row.updated_at,
@@ -1204,38 +1207,45 @@ async function handleApplyFavorite(request, env, user, kitchenId, favoriteId) {
   return json({ added: favorite.items.length, plan: await getPlan(env, kitchenId, user.id, weekStart) });
 }
 
-async function handleSetCook(request, env, user, kitchenId, date) {
+async function handleSetCook(request, env, user, kitchenId, date, slot = "afternoon") {
   if (!user) throw new HttpError(401, "请先登录。");
   await requireMembership(env, kitchenId, user.id, { edit: true });
   if (!parseDateKey(date)) throw new HttpError(400, "日期格式不正确。");
+  if (!COOK_SLOTS.has(slot)) throw new HttpError(400, "做饭时段不正确。");
   const body = await readJson(request);
   const member = await getMemberRecord(env, kitchenId, String(body.userId || ""));
   if (!member) throw new HttpError(400, "请选择一位当前厨房的成员。");
   await run(
     env,
-    `INSERT INTO day_cooks (kitchen_id, date, user_id, assigned_by, updated_at)
-     VALUES (?, ?, ?, ?, ?)
-     ON CONFLICT(kitchen_id, date)
+    `INSERT INTO day_cook_slots (kitchen_id, date, slot, user_id, assigned_by, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?)
+     ON CONFLICT(kitchen_id, date, slot)
      DO UPDATE SET user_id = excluded.user_id, assigned_by = excluded.assigned_by, updated_at = excluded.updated_at`,
     kitchenId,
     date,
+    slot,
     member.id,
     user.id,
     nowISO(),
   );
   const weekStart = dateKey(startOfWeek(parseDateKey(date)));
   const weekDates = weekDateKeys(weekStart);
-  return json({ weekStart, cooks: await getCooks(env, kitchenId, weekDates[0], weekDates[6]) });
+  return json({ weekStart, slot, cooks: await getCooks(env, kitchenId, weekDates[0], weekDates[6]) });
 }
 
-async function handleClearCook(env, user, kitchenId, date) {
+async function handleClearCook(env, user, kitchenId, date, slot = null) {
   if (!user) throw new HttpError(401, "请先登录。");
   await requireMembership(env, kitchenId, user.id, { edit: true });
   if (!parseDateKey(date)) throw new HttpError(400, "日期格式不正确。");
-  await run(env, "DELETE FROM day_cooks WHERE kitchen_id = ? AND date = ?", kitchenId, date);
+  if (slot !== null && !COOK_SLOTS.has(slot)) throw new HttpError(400, "做饭时段不正确。");
+  if (slot) {
+    await run(env, "DELETE FROM day_cook_slots WHERE kitchen_id = ? AND date = ? AND slot = ?", kitchenId, date, slot);
+  } else {
+    await run(env, "DELETE FROM day_cook_slots WHERE kitchen_id = ? AND date = ?", kitchenId, date);
+  }
   const weekStart = dateKey(startOfWeek(parseDateKey(date)));
   const weekDates = weekDateKeys(weekStart);
-  return json({ weekStart, cooks: await getCooks(env, kitchenId, weekDates[0], weekDates[6]) });
+  return json({ weekStart, slot, cooks: await getCooks(env, kitchenId, weekDates[0], weekDates[6]) });
 }
 
 async function handleGetGathering(env, user, kitchenId, url) {
@@ -2368,6 +2378,7 @@ async function deleteKitchenData(env, kitchenId) {
     env.DB.prepare("DELETE FROM poll_options WHERE poll_id IN (SELECT id FROM meal_polls WHERE kitchen_id = ?)").bind(kitchenId),
     env.DB.prepare("DELETE FROM meal_polls WHERE kitchen_id = ?").bind(kitchenId),
     env.DB.prepare("DELETE FROM grocery_duties WHERE kitchen_id = ?").bind(kitchenId),
+    env.DB.prepare("DELETE FROM day_cook_slots WHERE kitchen_id = ?").bind(kitchenId),
     env.DB.prepare("DELETE FROM day_cooks WHERE kitchen_id = ?").bind(kitchenId),
     env.DB.prepare("DELETE FROM meal_favorites WHERE kitchen_id = ?").bind(kitchenId),
     env.DB.prepare("DELETE FROM week_templates WHERE kitchen_id = ?").bind(kitchenId),
@@ -2594,9 +2605,15 @@ async function handleRequest(request, env) {
     return handleDeleteFavorite(env, user, match[1], match[2]);
   }
 
+  match = pathname.match(/^\/api\/kitchens\/([A-Za-z0-9_]+)\/cooks\/(\d{4}-\d{2}-\d{2})\/(morning|afternoon)$/);
+  if (match) {
+    if (method === "PUT") return handleSetCook(request, env, user, match[1], match[2], match[3]);
+    if (method === "DELETE") return handleClearCook(env, user, match[1], match[2], match[3]);
+  }
+
   match = pathname.match(/^\/api\/kitchens\/([A-Za-z0-9_]+)\/cooks\/(\d{4}-\d{2}-\d{2})$/);
   if (match) {
-    if (method === "PUT") return handleSetCook(request, env, user, match[1], match[2]);
+    if (method === "PUT") return handleSetCook(request, env, user, match[1], match[2], "afternoon");
     if (method === "DELETE") return handleClearCook(env, user, match[1], match[2]);
   }
 

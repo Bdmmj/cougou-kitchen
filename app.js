@@ -12,6 +12,10 @@
     { key: "snack", label: "加餐", short: "加" },
   ];
   const MEAL_KEYS = MEALS.map((meal) => meal.key);
+  const COOK_SLOTS = [
+    { key: "morning", label: "上午" },
+    { key: "afternoon", label: "下午" },
+  ];
   const DAY_NAMES = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"];
   const DAY_SHORT = ["一", "二", "三", "四", "五", "六", "日"];
   const TARGET_MIN = 500;
@@ -94,6 +98,7 @@
     recipeToolsLoaded: false,
     recipeTab: "templates",
     cookDate: null,
+    cookSlot: "afternoon",
     favoriteSource: null,
     pendingFavorite: null,
     pendingTemplate: null,
@@ -1327,7 +1332,7 @@
     const isOver = total > target;
     const progress = Math.min(100, Math.round((total / target) * 100));
     const weekday = DAY_NAMES[index];
-    const cook = state.plan?.cooks?.[key] || null;
+    const dayCooks = state.plan?.cooks?.[key] || null;
 
     let status;
     if (!itemCount) {
@@ -1340,14 +1345,23 @@
       status = `还可摄入 ${formatNumber(target - total)} kcal`;
     }
 
-    const cookInner = cook
-      ? `<span class="day-cook-avatar" aria-hidden="true">${escapeHtml(firstCharacter(cook.displayName))}</span>
-         <span class="day-cook-name">${escapeHtml(cook.displayName)}掌勺</span>`
-      : `<span class="day-cook-avatar is-empty" aria-hidden="true"><svg class="icon"><use href="#icon-chef"></use></svg></span>
-         <span class="day-cook-name">${editable ? "今天谁做饭？" : "还没安排掌勺"}</span>`;
-    const cookMarkup = editable
-      ? `<button class="day-cook${cook ? " is-set" : " is-empty"}" type="button" data-cook-date="${key}" aria-label="${weekday}${cook ? `由${escapeHtml(cook.displayName)}掌勺，点击修改` : "还没有安排掌勺，点击指定"}">${cookInner}</button>`
-      : `<div class="day-cook${cook ? " is-set" : " is-empty"} is-static">${cookInner}</div>`;
+    const cookRows = COOK_SLOTS.map((slot) => {
+      const cook = dayCooks?.[slot.key] || null;
+      const inner = `
+        <span class="day-cook-slot">${slot.label}</span>
+        <span class="day-cook-avatar${cook ? "" : " is-empty"}" aria-hidden="true">${
+          cook
+            ? escapeHtml(firstCharacter(cook.displayName))
+            : '<svg class="icon"><use href="#icon-chef"></use></svg>'
+        }</span>
+        <span class="day-cook-name${cook ? "" : " is-empty"}">${cook ? escapeHtml(cook.displayName) : "待安排"}</span>
+      `;
+      if (!editable) {
+        return `<div class="day-cook${cook ? " is-set" : " is-empty"} is-static">${inner}</div>`;
+      }
+      return `<button class="day-cook${cook ? " is-set" : " is-empty"}" type="button" data-cook-date="${key}" data-cook-slot="${slot.key}" aria-label="${weekday}${slot.label}${cook ? `由${escapeHtml(cook.displayName)}掌勺，点击修改` : "还没有安排掌勺，点击指定"}">${inner}</button>`;
+    }).join("");
+    const cookMarkup = `<div class="day-cooks">${cookRows}</div>`;
 
     const meals = MEALS.map((meal) => {
       const items = getMealItems(key, meal.key);
@@ -1962,15 +1976,15 @@
     return state.tableWeekStart || state.weekStart;
   }
 
-  function getCookForDate(key) {
+  function getCookForDate(key, slot) {
     const weekKey = dateKey(startOfWeek(parseDateKey(key)));
+    let dayCooks = null;
     if (state.table?.weekStart === weekKey && state.table.cooks) {
-      return state.table.cooks[key] || null;
+      dayCooks = state.table.cooks[key] || null;
+    } else if (state.plan?.cooks && dateKey(state.weekStart) === weekKey) {
+      dayCooks = state.plan.cooks[key] || null;
     }
-    if (state.plan?.cooks && dateKey(state.weekStart) === weekKey) {
-      return state.plan.cooks[key] || null;
-    }
-    return null;
+    return dayCooks?.[slot] || null;
   }
 
   async function loadTable({ silent = false } = {}) {
@@ -2032,27 +2046,34 @@
     dom.cookRoster.innerHTML = dates
       .map((date, index) => {
         const key = dateKey(date);
-        const cook = cooks?.[key] || null;
+        const dayCooks = cooks?.[key] || null;
         const isToday = key === todayKey;
-        const inner = `
-          <span class="roster-day-top">
-            <span>${DAY_NAMES[index]}</span>
-            <em>${formatShortDate(date)}</em>
-          </span>
-          ${
-            cook
-              ? `<span class="roster-avatar" aria-hidden="true">${escapeHtml(firstCharacter(cook.displayName))}</span>
-                 <strong>${escapeHtml(cook.displayName)}</strong>
-                 <small class="roster-role">掌勺</small>`
-              : `<span class="roster-avatar is-empty" aria-hidden="true"><svg class="icon"><use href="#icon-chef"></use></svg></span>
-                 <strong class="is-empty">待安排</strong>
-                 <small class="roster-role">${editable ? "点这里指定" : "还没人做饭"}</small>`
+        const hasCook = Boolean(dayCooks?.morning || dayCooks?.afternoon);
+        const slotRows = COOK_SLOTS.map((slot) => {
+          const cook = dayCooks?.[slot.key] || null;
+          const inner = `
+            <em>${slot.label}</em>
+            ${
+              cook
+                ? `<span class="roster-slot-avatar" aria-hidden="true">${escapeHtml(firstCharacter(cook.displayName))}</span>
+                   <span class="roster-slot-name">${escapeHtml(cook.displayName)}</span>`
+                : '<span class="roster-slot-name is-empty">待安排</span>'
+            }
+          `;
+          if (!editable) {
+            return `<div class="roster-slot${cook ? " has-cook" : " is-empty"} is-static">${inner}</div>`;
           }
+          return `<button class="roster-slot${cook ? " has-cook" : " is-empty"}" type="button" data-cook-date="${key}" data-cook-slot="${slot.key}" aria-label="${DAY_NAMES[index]}${slot.label}${cook ? `由${escapeHtml(cook.displayName)}掌勺，点击修改` : "还没有安排掌勺，点击指定"}">${inner}</button>`;
+        }).join("");
+        return `
+          <div class="roster-day${isToday ? " is-today" : ""}${hasCook ? " has-cook" : ""}">
+            <span class="roster-day-top">
+              <span>${DAY_NAMES[index]}</span>
+              <em>${formatShortDate(date)}</em>
+            </span>
+            <div class="roster-slots">${slotRows}</div>
+          </div>
         `;
-        if (!editable) {
-          return `<div class="roster-day${isToday ? " is-today" : ""}${cook ? " has-cook" : ""}">${inner}</div>`;
-        }
-        return `<button class="roster-day${isToday ? " is-today" : ""}${cook ? " has-cook" : ""}" type="button" data-cook-date="${key}" aria-label="${DAY_NAMES[index]}${cook ? `由${escapeHtml(cook.displayName)}掌勺，点击修改` : "还没有安排掌勺，点击指定"}">${inner}</button>`;
       })
       .join("");
   }
@@ -2190,15 +2211,17 @@
     await loadTable();
   }
 
-  function openCookModal(date) {
+  function openCookModal(date, slotKey = "afternoon") {
     if (!state.kitchen || !canEdit()) return;
     const dateValue = parseDateKey(date);
     if (!dateValue) return;
+    const slot = COOK_SLOTS.find((item) => item.key === slotKey) || COOK_SLOTS[1];
     state.cookDate = date;
+    state.cookSlot = slot.key;
     const weekday = DAY_NAMES[getWeekdayIndex(dateValue)];
-    const cook = getCookForDate(date);
-    dom.cookModalTitle.textContent = `${weekday}谁做饭？`;
-    dom.cookModalCopy.textContent = `${formatShortDate(dateValue)} · 选一位厨房成员来掌勺，安排会同步给所有人。`;
+    const cook = getCookForDate(date, slot.key);
+    dom.cookModalTitle.textContent = `${weekday}${slot.label}谁做饭？`;
+    dom.cookModalCopy.textContent = `${formatShortDate(dateValue)} · ${slot.label}这一餐由谁掌勺？选一位厨房成员，安排会同步给所有人。`;
     dom.cookChoiceList.innerHTML = state.members
       .map((member) => {
         const checked = cook?.userId === member.id;
@@ -2244,12 +2267,13 @@
     dom.cookSave.textContent = "保存中…";
     try {
       const data = await api(
-        `/api/kitchens/${encodeURIComponent(state.kitchen.id)}/cooks/${encodeURIComponent(state.cookDate)}`,
+        `/api/kitchens/${encodeURIComponent(state.kitchen.id)}/cooks/${encodeURIComponent(state.cookDate)}/${encodeURIComponent(state.cookSlot)}`,
         { method: "PUT", body: { userId: selected.value } },
       );
       applyCookUpdate(data.weekStart, data.cooks);
+      const slotLabel = COOK_SLOTS.find((item) => item.key === state.cookSlot)?.label || "";
       closeModal();
-      showToast("掌勺的人已经安排好了。");
+      showToast(`${slotLabel}掌勺的人已经安排好了。`);
     } catch (error) {
       setFormError(null, dom.cookError, error.message);
     } finally {
@@ -2263,12 +2287,13 @@
     dom.cookClear.disabled = true;
     try {
       const data = await api(
-        `/api/kitchens/${encodeURIComponent(state.kitchen.id)}/cooks/${encodeURIComponent(state.cookDate)}`,
+        `/api/kitchens/${encodeURIComponent(state.kitchen.id)}/cooks/${encodeURIComponent(state.cookDate)}/${encodeURIComponent(state.cookSlot)}`,
         { method: "DELETE" },
       );
       applyCookUpdate(data.weekStart, data.cooks);
+      const slotLabel = COOK_SLOTS.find((item) => item.key === state.cookSlot)?.label || "";
       closeModal();
-      showToast("已清除这一天的掌勺安排。");
+      showToast(`已清除${slotLabel}的掌勺安排。`);
     } catch (error) {
       showToast(error.message);
     } finally {
@@ -4620,7 +4645,7 @@
     dom.tableNextWeek.addEventListener("click", () => changeTableWeek(1));
     dom.cookRoster.addEventListener("click", (event) => {
       const button = event.target.closest("[data-cook-date]");
-      if (button) openCookModal(button.dataset.cookDate);
+      if (button) openCookModal(button.dataset.cookDate, button.dataset.cookSlot);
     });
     dom.pollList.addEventListener("click", (event) => {
       const voteButton = event.target.closest("[data-poll-vote]");
@@ -4744,7 +4769,7 @@
     dom.weekBoard.addEventListener("click", (event) => {
       const cookButton = event.target.closest("[data-cook-date]");
       if (cookButton) {
-        if (canEdit()) openCookModal(cookButton.dataset.cookDate);
+        if (canEdit()) openCookModal(cookButton.dataset.cookDate, cookButton.dataset.cookSlot);
         return;
       }
       if (!canEdit()) return;

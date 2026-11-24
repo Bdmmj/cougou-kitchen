@@ -175,3 +175,32 @@ CREATE TABLE IF NOT EXISTS grocery_duties (
   updated_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_grocery_duties_kitchen_week ON grocery_duties (kitchen_id, week_start, day_index);
+
+-- Cook roster split into morning/afternoon slots.
+-- The old day_cooks table is kept for migration compatibility and can be ignored.
+CREATE TABLE IF NOT EXISTS schema_migrations (
+  id TEXT PRIMARY KEY
+);
+
+CREATE TABLE IF NOT EXISTS day_cook_slots (
+  kitchen_id TEXT NOT NULL,
+  date TEXT NOT NULL,
+  slot TEXT NOT NULL,
+  user_id TEXT,
+  assigned_by TEXT,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (kitchen_id, date, slot)
+);
+CREATE INDEX IF NOT EXISTS idx_day_cook_slots_kitchen_date ON day_cook_slots (kitchen_id, date);
+
+INSERT OR IGNORE INTO day_cook_slots (kitchen_id, date, slot, user_id, assigned_by, updated_at)
+SELECT kitchen_id, date, 'morning', user_id, assigned_by, updated_at
+FROM day_cooks
+WHERE NOT EXISTS (SELECT 1 FROM schema_migrations WHERE id = 'day_cooks_split_v1');
+
+INSERT OR IGNORE INTO day_cook_slots (kitchen_id, date, slot, user_id, assigned_by, updated_at)
+SELECT kitchen_id, date, 'afternoon', user_id, assigned_by, updated_at
+FROM day_cooks
+WHERE NOT EXISTS (SELECT 1 FROM schema_migrations WHERE id = 'day_cooks_split_v1');
+
+INSERT OR IGNORE INTO schema_migrations (id) VALUES ('day_cooks_split_v1');

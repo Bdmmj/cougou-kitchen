@@ -16,6 +16,7 @@ const SESSION_AGE_SECONDS = 60 * 60 * 24 * 30;
 const CONFIGURED_ADMIN_USERNAME = String(process.env.ADMIN_USERNAME || "").trim();
 
 const MEALS = new Set(["breakfast", "lunch", "dinner", "snack"]);
+const COOK_SLOTS = new Set(["morning", "afternoon"]);
 const MEAL_LABELS = { breakfast: "早餐", lunch: "午餐", dinner: "晚餐", snack: "加餐" };
 const INGREDIENT_CATEGORIES = new Set([
   "staple",
@@ -188,6 +189,20 @@ db.exec(`
     PRIMARY KEY (kitchen_id, date)
   );
 
+  CREATE TABLE IF NOT EXISTS day_cook_slots (
+    kitchen_id TEXT NOT NULL REFERENCES kitchens(id) ON DELETE CASCADE,
+    date TEXT NOT NULL,
+    slot TEXT NOT NULL CHECK (slot IN ('morning', 'afternoon')),
+    user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+    assigned_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (kitchen_id, date, slot)
+  );
+
+  CREATE TABLE IF NOT EXISTS schema_migrations (
+    id TEXT PRIMARY KEY
+  );
+
   CREATE TABLE IF NOT EXISTS meal_polls (
     id TEXT PRIMARY KEY,
     kitchen_id TEXT NOT NULL REFERENCES kitchens(id) ON DELETE CASCADE,
@@ -251,6 +266,32 @@ if (CONFIGURED_ADMIN_USERNAME) {
   if (configured && !configured.is_admin) {
     db.prepare("UPDATE users SET is_admin = 1 WHERE id = ?").run(configured.id);
     console.log(`已将 ADMIN_USERNAME 指定的账号 ${configured.username} 设为管理员。`);
+  }
+}
+
+// Split the old one-cook-per-day assignments into morning/afternoon slots once.
+// Existing assignments are copied to both slots so no data is lost.
+const dayCookSplitMigration = db
+  .prepare("SELECT 1 AS done FROM schema_migrations WHERE id = ?")
+  .get("day_cooks_split_v1");
+if (!dayCookSplitMigration) {
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    db.exec(
+      `INSERT OR IGNORE INTO day_cook_slots (kitchen_id, date, slot, user_id, assigned_by, updated_at)
+       SELECT kitchen_id, date, 'morning', user_id, assigned_by, updated_at
+       FROM day_cooks WHERE user_id IS NOT NULL`,
+    );
+    db.exec(
+      `INSERT OR IGNORE INTO day_cook_slots (kitchen_id, date, slot, user_id, assigned_by, updated_at)
+       SELECT kitchen_id, date, 'afternoon', user_id, assigned_by, updated_at
+       FROM day_cooks WHERE user_id IS NOT NULL`,
+    );
+    db.prepare("INSERT INTO schema_migrations (id) VALUES (?)").run("day_cooks_split_v1");
+    db.exec("COMMIT");
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
   }
 }
 
@@ -1163,17 +1204,19 @@ function getFavorite(kitchenId, favoriteId) {
 function getCooks(kitchenId, startDate, endDate) {
   const rows = db
     .prepare(
-      `SELECT c.date, c.user_id, c.updated_at, u.display_name
-       FROM day_cooks c
+      `SELECT c.date, c.slot, c.user_id, c.updated_at, u.display_name
+       FROM day_cook_slots c
        LEFT JOIN users u ON u.id = c.user_id
        WHERE c.kitchen_id = ? AND c.date >= ? AND c.date <= ?
-       ORDER BY c.date ASC`,
+       ORDER BY c.date ASC, CASE c.slot WHEN 'morning' THEN 0 ELSE 1 END`,
     )
     .all(kitchenId, startDate, endDate);
   const cooks = {};
   rows.forEach((row) => {
-    cooks[row.date] = {
+    if (!cooks[row.date]) cooks[row.date] = { morning: null, afternoon: null };
+    cooks[row.date][row.slot] = {
       date: row.date,
+      slot: row.slot,
       userId: row.user_id,
       displayName: row.display_name || "已离开的成员",
       updatedAt: row.updated_at,
@@ -1526,19 +1569,20 @@ async function handleApplyFavorite(req, res, user, kitchenId, favoriteId) {
    Cook / poll / grocery handlers
    ========================================================= */
 
-async function handleSetCook(req, res, user, kitchenId, date) {
+async function handleSetCook(req, res, user, kitchenId, date, slot = "afternoon") {
   if (!user) throw new HttpError(401, "请先登录。");
   requireMembership(kitchenId, user.id, { edit: true });
   if (!parseDateKey(date)) throw new HttpError(400, "日期格式不正确。");
+  if (!COOK_SLOTS.has(slot)) throw new HttpError(400, "做饭时段不正确。");
   const body = await readJsonBody(req);
   const member = getMemberRecord(kitchenId, String(body.userId || ""));
   if (!member) throw new HttpError(400, "请选择一位当前厨房的成员。");
   db.prepare(
-    `INSERT INTO day_cooks (kitchen_id, date, user_id, assigned_by, updated_at)
-     VALUES (?, ?, ?, ?, ?)
-     ON CONFLICT(kitchen_id, date)
+    `INSERT INTO day_cook_slots (kitchen_id, date, slot, user_id, assigned_by, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?)
+     ON CONFLICT(kitchen_id, date, slot)
      DO UPDATE SET user_id = excluded.user_id, assigned_by = excluded.assigned_by, updated_at = excluded.updated_at`,
-  ).run(kitchenId, date, member.id, user.id, nowISO());
+  ).run(kitchenId, date, slot, member.id, user.id, nowISO());
   const weekStart = dateKey(startOfWeek(parseDateKey(date)));
   const dates = weekDateKeys(weekStart);
   broadcastKitchen(kitchenId, {
@@ -1549,15 +1593,25 @@ async function handleSetCook(req, res, user, kitchenId, date) {
   });
   sendJson(res, 200, {
     weekStart,
+    slot,
     cooks: getCooks(kitchenId, dates[0], dates[6]),
   });
 }
 
-async function handleClearCook(req, res, user, kitchenId, date) {
+async function handleClearCook(req, res, user, kitchenId, date, slot = null) {
   if (!user) throw new HttpError(401, "请先登录。");
   requireMembership(kitchenId, user.id, { edit: true });
   if (!parseDateKey(date)) throw new HttpError(400, "日期格式不正确。");
-  db.prepare("DELETE FROM day_cooks WHERE kitchen_id = ? AND date = ?").run(kitchenId, date);
+  if (slot !== null && !COOK_SLOTS.has(slot)) throw new HttpError(400, "做饭时段不正确。");
+  if (slot) {
+    db.prepare("DELETE FROM day_cook_slots WHERE kitchen_id = ? AND date = ? AND slot = ?").run(
+      kitchenId,
+      date,
+      slot,
+    );
+  } else {
+    db.prepare("DELETE FROM day_cook_slots WHERE kitchen_id = ? AND date = ?").run(kitchenId, date);
+  }
   const weekStart = dateKey(startOfWeek(parseDateKey(date)));
   const dates = weekDateKeys(weekStart);
   broadcastKitchen(kitchenId, {
@@ -1568,6 +1622,7 @@ async function handleClearCook(req, res, user, kitchenId, date) {
   });
   sendJson(res, 200, {
     weekStart,
+    slot,
     cooks: getCooks(kitchenId, dates[0], dates[6]),
   });
 }
@@ -3266,11 +3321,20 @@ async function handleApi(req, res, url) {
     return handleDeleteFavorite(req, res, user, match[1], match[2]);
   }
 
+  match = pathname.match(/^\/api\/kitchens\/([A-Za-z0-9_]+)\/cooks\/(\d{4}-\d{2}-\d{2})\/(morning|afternoon)$/);
+  if (match) {
+    const kitchenId = match[1];
+    const date = match[2];
+    const slot = match[3];
+    if (method === "PUT") return handleSetCook(req, res, user, kitchenId, date, slot);
+    if (method === "DELETE") return handleClearCook(req, res, user, kitchenId, date, slot);
+  }
+
   match = pathname.match(/^\/api\/kitchens\/([A-Za-z0-9_]+)\/cooks\/(\d{4}-\d{2}-\d{2})$/);
   if (match) {
     const kitchenId = match[1];
     const date = match[2];
-    if (method === "PUT") return handleSetCook(req, res, user, kitchenId, date);
+    if (method === "PUT") return handleSetCook(req, res, user, kitchenId, date, "afternoon");
     if (method === "DELETE") return handleClearCook(req, res, user, kitchenId, date);
   }
 

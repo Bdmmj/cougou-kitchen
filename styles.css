@@ -9708,3 +9708,171 @@ button.roster-day:hover {
     max-height: 420px;
   }
 }
+
+/* ---------- Cook roster: morning / afternoon slots ---------- */
+
+.day-cooks {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 0 9px 5px;
+}
+
+.day-cooks .day-cook {
+  width: 100%;
+  margin: 0;
+}
+
+.day-cook-slot {
+  flex: 0 0 auto;
+  min-width: 25px;
+  padding-right: 5px;
+  border-right: 1px solid var(--line);
+  color: var(--faint);
+  font-size: 9.5px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.day-cook-name.is-empty {
+  color: var(--faint);
+  font-weight: 500;
+}
+
+.roster-day {
+  align-items: stretch;
+  justify-content: flex-start;
+  min-height: 108px;
+  cursor: default;
+}
+
+.roster-day .roster-day-top {
+  width: 100%;
+}
+
+.roster-slots {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 7px;
+}
+
+.roster-slot {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  min-height: 25px;
+  padding: 3px 5px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #fffdf8;
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 10px;
+  line-height: 1.2;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 150ms ease,
+    background 150ms ease;
+}
+
+.roster-slot:hover {
+  border-color: var(--line-strong);
+  background: #fffaf1;
+}
+
+.roster-slot.is-empty {
+  border-style: dashed;
+  background: transparent;
+}
+
+.roster-slot.is-static {
+  cursor: default;
+}
+
+.roster-slot em {
+  flex: 0 0 auto;
+  color: var(--faint);
+  font-size: 9px;
+  font-style: normal;
+  line-height: 1.2;
+}
+
+.roster-slot-avatar {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--sage-soft);
+  color: var(--sage-deep);
+  font-family: var(--serif);
+  font-size: 8px;
+  font-weight: 700;
+}
+
+.roster-slot-name {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ink-soft);
+  font-size: 10px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.roster-slot-name.is-empty {
+  color: var(--faint);
+  font-weight: 500;
+}
+
+@media (max-width: 880px) {
+  .day-cook-slot {
+    font-size: 10.5px;
+  }
+
+  .roster-day {
+    min-height: 106px;
+  }
+
+  .roster-slot {
+    min-height: 27px;
+    font-size: 11px;
+  }
+
+  .roster-slot em {
+    font-size: 9.5px;
+  }
+
+  .roster-slot-name {
+    font-size: 11px;
+  }
+}
+
+@media (max-width: 560px) {
+  .roster-day {
+    min-height: 102px;
+  }
+
+  .roster-slot {
+    gap: 2px;
+    min-height: 25px;
+    padding: 3px 3px;
+  }
+
+  .roster-slot-avatar {
+    display: none;
+  }
+
+  .roster-slot em {
+    font-size: 8px;
+  }
+
+  .roster-slot-name {
+    font-size: 9px;
+  }
+}
