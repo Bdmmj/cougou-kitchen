@@ -12,9 +12,10 @@
     { key: "snack", label: "加餐", short: "加" },
   ];
   const MEAL_KEYS = MEALS.map((meal) => meal.key);
+  // Keep the original keys for data compatibility; the UI now calls them lunch/dinner.
   const COOK_SLOTS = [
-    { key: "morning", label: "上午" },
-    { key: "afternoon", label: "下午" },
+    { key: "morning", label: "午饭" },
+    { key: "afternoon", label: "晚饭" },
   ];
   const DAY_NAMES = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"];
   const DAY_SHORT = ["一", "二", "三", "四", "五", "六", "日"];
