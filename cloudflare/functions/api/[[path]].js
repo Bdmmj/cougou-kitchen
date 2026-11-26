@@ -2110,12 +2110,22 @@ async function getWellnessWeek(env, userId, weekStart) {
     dates[0],
     dates[6],
   );
+  const weightRows = await all(
+    env,
+    `SELECT date, weight, updated_at FROM weight_logs
+     WHERE user_id = ? AND date >= ? AND date <= ?`,
+    userId,
+    dates[0],
+    dates[6],
+  );
   const sleepByDate = new Map(sleepRows.map((row) => [row.date, row]));
   const exerciseByDate = new Map(exerciseRows.map((row) => [row.date, row]));
+  const weightByDate = new Map(weightRows.map((row) => [row.date, row]));
   const days = {};
   dates.forEach((date) => {
     const sleep = sleepByDate.get(date);
     const exercise = exerciseByDate.get(date);
+    const weight = weightByDate.get(date);
     days[date] = {
       sleep: sleep
         ? {
@@ -2129,9 +2139,34 @@ async function getWellnessWeek(env, userId, weekStart) {
       exercise: exercise
         ? { date: exercise.date, calories: exercise.calories, updatedAt: exercise.updated_at }
         : null,
+      weight: weight
+        ? { date: weight.date, weight: Number(weight.weight), updatedAt: weight.updated_at }
+        : null,
     };
   });
-  return { weekStart, days };
+
+  const today = new Date();
+  const rangeEnd = dateKey(today);
+  const rangeStart = dateKey(addDays(today, -29));
+  const trendRows = await all(
+    env,
+    `SELECT date, weight FROM weight_logs
+     WHERE user_id = ? AND date >= ? AND date <= ?
+     ORDER BY date ASC`,
+    userId,
+    rangeStart,
+    rangeEnd,
+  );
+
+  return {
+    weekStart,
+    days,
+    weightTrend: {
+      rangeStart,
+      rangeEnd,
+      points: trendRows.map((row) => ({ date: row.date, weight: Number(row.weight) })),
+    },
+  };
 }
 
 async function handleGetWellness(env, user, url) {
@@ -2196,6 +2231,36 @@ async function handleSaveExercise(request, env, user) {
     user.id,
     date,
     Math.round(calories),
+    now,
+    now,
+  );
+  return json(await getWellnessWeek(env, user.id, weekStart));
+}
+
+async function handleSaveWeight(request, env, user) {
+  if (!user) throw new HttpError(401, "请先登录。");
+  const body = await readJson(request);
+  const date = String(body.date || "");
+  const weight = Number(body.weight);
+  if (!parseDateKey(date)) throw new HttpError(400, "日期格式不正确。");
+  if (!Number.isFinite(weight) || weight < 20 || weight > 300) {
+    throw new HttpError(400, "体重需要在 20–300 kg 之间。");
+  }
+  const normalized = Math.round(weight * 10) / 10;
+  const weekStart = normalizeWeekStart(body.weekStart || dateKey(startOfWeek(parseDateKey(date))));
+  if (!weekDateKeys(weekStart).includes(date)) throw new HttpError(400, "日期不在当前周内。");
+
+  const now = nowISO();
+  await run(
+    env,
+    `INSERT INTO weight_logs (user_id, date, weight, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT(user_id, date) DO UPDATE SET
+       weight = excluded.weight,
+       updated_at = excluded.updated_at`,
+    user.id,
+    date,
+    normalized,
     now,
     now,
   );
@@ -2445,6 +2510,7 @@ async function handleAdminApi(request, env, url, user) {
       env.DB.prepare("DELETE FROM messages WHERE user_id = ?").bind(target.id),
       env.DB.prepare("DELETE FROM sleep_logs WHERE user_id = ?").bind(target.id),
       env.DB.prepare("DELETE FROM exercise_logs WHERE user_id = ?").bind(target.id),
+      env.DB.prepare("DELETE FROM weight_logs WHERE user_id = ?").bind(target.id),
       env.DB.prepare("DELETE FROM users WHERE id = ?").bind(target.id),
     ]);
     return json({ ok: true });
@@ -2525,6 +2591,10 @@ async function handleRequest(request, env) {
 
   if (pathname === "/api/wellness/exercise" && method === "PUT") {
     return handleSaveExercise(request, env, user);
+  }
+
+  if (pathname === "/api/wellness/weight" && method === "PUT") {
+    return handleSaveWeight(request, env, user);
   }
 
   if (pathname.startsWith("/api/admin/")) {

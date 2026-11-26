@@ -41,6 +41,14 @@
 
 ![饭局](preview-table.png)
 
+### 健康记录（仅自己可见）
+
+- 记录每天的睡眠计划、运动消耗和体重。
+- 体重支持按日期记录，并自动画出最近 30 天的体重曲线；本周记录表也会显示每天的体重。
+- 健康数据属于个人，不会同步给厨房里的其他成员。
+
+![健康记录与体重曲线](preview-wellness.png)
+
 ### 登录与账号
 
 - 用户名 + 密码注册 / 登录，密码使用 Node.js `scrypt` 加盐哈希保存。
@@ -187,6 +195,7 @@ ADMIN_USERNAME=用户名 npm start
 ├── preview-admin.png
 ├── preview-table.png
 ├── preview-recipe-tools.png
+├── preview-wellness.png
 └── data/                   # 运行时生成的 SQLite 数据（不提交）
 ```
 

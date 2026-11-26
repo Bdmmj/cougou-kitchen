@@ -204,3 +204,13 @@ FROM day_cooks
 WHERE NOT EXISTS (SELECT 1 FROM schema_migrations WHERE id = 'day_cooks_split_v1');
 
 INSERT OR IGNORE INTO schema_migrations (id) VALUES ('day_cooks_split_v1');
+
+CREATE TABLE IF NOT EXISTS weight_logs (
+  user_id TEXT NOT NULL,
+  date TEXT NOT NULL,
+  weight REAL NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (user_id, date)
+);
+CREATE INDEX IF NOT EXISTS idx_weight_logs_user_date ON weight_logs (user_id, date);

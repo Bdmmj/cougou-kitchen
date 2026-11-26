@@ -62,6 +62,7 @@
     <symbol id="icon-basket" viewBox="0 0 24 24"><path d="M3.5 10h17l-1.6 9.5H5.1L3.5 10Z"/><path d="m7.8 10 4.2-6.5 4.2 6.5M9.2 14v2.2M14.8 14v2.2"/></symbol>
     <symbol id="icon-star" viewBox="0 0 24 24"><path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1-5.4-2.9-5.4 2.9 1-6.1-4.4-4.3 6.1-.9L12 3Z"/></symbol>
     <symbol id="icon-bookmark" viewBox="0 0 24 24"><path d="M6 3.5h12v17l-6-4.2-6 4.2v-17Z"/></symbol>
+    <symbol id="icon-scale" viewBox="0 0 24 24"><rect x="4" y="3.5" width="16" height="17" rx="4"/><path d="M8 8.5h8M9 15a3 3 0 0 1 6 0M12 15v-3"/></symbol>
   </svg>
 
   <div class="page-grain" aria-hidden="true"></div>
@@ -580,7 +581,7 @@ npm start</code></pre>
           <div class="view-heading">
             <p class="eyebrow"><span class="eyebrow-dash"></span>REST &amp; MOVE</p>
             <h1 id="wellnessTitle">健康<span class="title-dot">.</span></h1>
-            <p class="view-lede">记录每天的睡眠计划和运动消耗，把身体的节奏也放进生活里。</p>
+            <p class="view-lede">记录每天的睡眠、运动和体重，把身体的节奏也放进生活里。</p>
           </div>
           <div class="view-head-actions">
             <span class="count-chip" id="wellnessRange">本周</span>
@@ -649,13 +650,48 @@ npm start</code></pre>
           </article>
         </div>
 
+        <section class="wellness-card weight-card" aria-labelledby="weightTitle">
+          <div class="wellness-card-head">
+            <span class="wellness-icon is-weight"><svg class="icon" aria-hidden="true"><use href="#icon-scale"></use></svg></span>
+            <div>
+              <p class="card-kicker">WEIGHT TRACKER</p>
+              <h2 id="weightTitle">体重记录</h2>
+            </div>
+            <span class="weight-latest" id="weightLatest">—</span>
+          </div>
+          <div class="weight-layout">
+            <div class="weight-entry">
+              <p class="wellness-copy" id="weightDateLabel">记录这一天的体重。</p>
+              <div class="weight-input-row">
+                <input id="weightInput" type="number" min="20" max="300" step="0.1" inputmode="decimal" placeholder="0.0" aria-label="体重（公斤）">
+                <span>kg</span>
+              </div>
+              <button class="button button-primary wellness-save" id="saveWeight" type="button">
+                <svg class="icon" aria-hidden="true"><use href="#icon-check"></use></svg>
+                保存体重
+              </button>
+              <p class="wellness-hint" id="weightHint">每天记录一次，曲线会按日期连接。</p>
+            </div>
+            <div class="weight-chart-panel">
+              <div class="weight-chart-head">
+                <div>
+                  <p class="card-kicker">DAILY TREND</p>
+                  <h3>最近 30 天</h3>
+                </div>
+                <div class="weight-stats" id="weightStats"></div>
+              </div>
+              <div class="weight-chart" id="weightChart" role="img" aria-label="最近 30 天体重曲线"></div>
+            </div>
+          </div>
+        </section>
+
         <section class="wellness-summary-card">
           <div class="card-heading">
             <div>
               <p class="card-kicker">THIS WEEK</p>
               <h2>本周记录</h2>
             </div>
-            <span class="member-hint">睡眠与运动均为个人记录</span>
+            <span class="member-hint">睡眠、运动与体重均为个人记录</span>
           </div>
           <div class="wellness-summary" id="wellnessSummary"></div>
         </section>

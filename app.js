@@ -87,6 +87,7 @@
     wellnessWeekStart: null,
     wellnessDate: null,
     wellnessDays: null,
+    weightTrend: null,
     wellnessLoading: false,
     messages: [],
     table: null,
@@ -608,6 +609,7 @@
     state.wellnessWeekStart = null;
     state.wellnessDate = null;
     state.wellnessDays = null;
+    state.weightTrend = null;
     state.wellnessLoading = false;
     state.messages = [];
     dom.bootScreen.hidden = true;
@@ -1830,7 +1832,7 @@
     const todayKey = dateKey(new Date());
     dom.wellnessSummary.innerHTML = `
       <div class="wellness-summary-head" aria-hidden="true">
-        <span>日期</span><span>睡眠</span><span>运动</span>
+        <span>日期</span><span>睡眠</span><span>运动</span><span>体重</span>
       </div>
       ${dates
         .map((date, index) => {
@@ -1842,11 +1844,130 @@
               <span class="wellness-summary-date">${DAY_NAMES[index]} ${date.getMonth() + 1}/${date.getDate()}${key === todayKey ? " · 今天" : ""}</span>
               <span>${day?.sleep ? formatSleepDuration(day.sleep.durationMinutes) : '<span class="wellness-summary-empty">—</span>'}</span>
               <span>${day?.exercise ? `${formatNumber(day.exercise.calories)} kcal` : '<span class="wellness-summary-empty">—</span>'}</span>
+              <span>${day?.weight ? `${formatWeight(day.weight.weight)} kg` : '<span class="wellness-summary-empty">—</span>'}</span>
             </button>
           `;
         })
         .join("")}
     `;
+  }
+
+  function formatWeight(value) {
+    const weight = Number(value);
+    return Number.isFinite(weight) ? weight.toFixed(1) : "—";
+  }
+
+  function renderWeightChart() {
+    if (!dom.weightChart) return;
+    const trend = state.weightTrend;
+    const points = Array.isArray(trend?.points)
+      ? trend.points
+          .filter((point) => Number.isFinite(Number(point.weight)))
+          .slice()
+          .sort((left, right) => left.date.localeCompare(right.date))
+      : [];
+
+    dom.weightStats.innerHTML = "";
+    dom.weightLatest.textContent = points.length
+      ? `${formatWeight(points[points.length - 1].weight)} kg`
+      : "—";
+
+    if (!points.length) {
+      dom.weightStats.innerHTML = "<span>还没有记录</span>";
+      dom.weightChart.innerHTML = `
+        <div class="weight-chart-empty">
+          <strong>还没有体重记录</strong>
+          <span>在上方记录今天的体重，曲线会从这里开始。</span>
+        </div>
+      `;
+      dom.weightChart.setAttribute("aria-label", "最近 30 天还没有体重记录");
+      return;
+    }
+
+    const first = points[0];
+    const last = points[points.length - 1];
+    const difference = Number(last.weight) - Number(first.weight);
+    dom.weightStats.innerHTML = `
+      <span>记录 ${points.length} 天</span>
+      <span>${points.length > 1 ? `变化 ${difference >= 0 ? "+" : ""}${difference.toFixed(1)} kg` : "继续记录看趋势"}</span>
+    `;
+
+    const width = Math.max(300, dom.weightChart.clientWidth || 680);
+    const height = 220;
+    const pad = { top: 22, right: 16, bottom: 28, left: 46 };
+    const plotWidth = Math.max(1, width - pad.left - pad.right);
+    const plotHeight = Math.max(1, height - pad.top - pad.bottom);
+    const start = parseDateKey(trend?.rangeStart) || parseDateKey(first.date);
+    const end = parseDateKey(trend?.rangeEnd) || parseDateKey(last.date);
+    const totalDays = Math.max(1, Math.round((end - start) / 86400000));
+    const dayIndex = (date) => Math.max(0, Math.min(totalDays, Math.round((parseDateKey(date) - start) / 86400000)));
+
+    const values = points.map((point) => Number(point.weight));
+    let minValue = Math.min(...values);
+    let maxValue = Math.max(...values);
+    const padding = Math.max(0.4, (maxValue - minValue) * 0.18);
+    minValue = Math.floor((minValue - padding) * 10) / 10;
+    maxValue = Math.ceil((maxValue + padding) * 10) / 10;
+    if (maxValue - minValue < 1.6) {
+      const middle = (maxValue + minValue) / 2;
+      minValue = middle - 0.8;
+      maxValue = middle + 0.8;
+    }
+
+    const xFor = (date) => pad.left + (dayIndex(date) / totalDays) * plotWidth;
+    const yFor = (weight) => pad.top + (1 - (weight - minValue) / (maxValue - minValue)) * plotHeight;
+
+    const grid = [];
+    for (let index = 0; index <= 4; index += 1) {
+      const y = pad.top + (plotHeight * index) / 4;
+      const value = maxValue - ((maxValue - minValue) * index) / 4;
+      grid.push(
+        `<line x1="${pad.left}" y1="${y.toFixed(1)}" x2="${(pad.left + plotWidth).toFixed(1)}" y2="${y.toFixed(1)}" stroke="#e6ddcd" stroke-dasharray="${index === 4 ? "0" : "3 5"}"></line>`,
+        `<text x="${(pad.left - 8).toFixed(1)}" y="${(y + 3).toFixed(1)}" text-anchor="end" fill="#8b8377" font-size="9.5">${value.toFixed(1)}</text>`,
+      );
+    }
+
+    for (let index = 0; index < 5; index += 1) {
+      const ratio = index / 4;
+      const tickDate = addDays(start, Math.round(totalDays * ratio));
+      const x = pad.left + plotWidth * ratio;
+      grid.push(
+        `<text x="${x.toFixed(1)}" y="${(height - 8).toFixed(1)}" text-anchor="${index === 0 ? "start" : index === 4 ? "end" : "middle"}" fill="#8b8377" font-size="9.5">${tickDate.getMonth() + 1}/${tickDate.getDate()}</text>`,
+      );
+    }
+
+    const linePoints = points
+      .map((point) => `${xFor(point.date).toFixed(1)},${yFor(Number(point.weight)).toFixed(1)}`)
+      .join(" L ");
+    const firstX = xFor(first.date);
+    const lastXValue = xFor(last.date);
+    const bottomY = (pad.top + plotHeight).toFixed(1);
+    const areaPath = `M ${firstX.toFixed(1)},${bottomY} L ${linePoints} L ${lastXValue.toFixed(1)},${bottomY} Z`;
+    const dots = points
+      .map((point) => {
+        const x = xFor(point.date);
+        const y = yFor(Number(point.weight));
+        return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="3.4" fill="#fffaf2" stroke="#77866a" stroke-width="1.8"><title>${point.date} · ${formatWeight(point.weight)} kg</title></circle>`;
+      })
+      .join("");
+    const lastX = xFor(last.date);
+    const lastY = yFor(Number(last.weight));
+    const labelAnchor = lastX > width - 70 ? "end" : lastX < 60 ? "start" : "middle";
+    const lastLabel = `<text x="${lastX.toFixed(1)}" y="${(lastY - 12).toFixed(1)}" text-anchor="${labelAnchor}" fill="#52624b" font-size="10.5" font-weight="600">${formatWeight(last.weight)} kg</text>`;
+
+    dom.weightChart.innerHTML = `
+      <svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" aria-hidden="true">
+        ${grid.join("")}
+        <path d="${areaPath}" fill="rgba(119, 134, 106, 0.1)"></path>
+        <path d="M ${linePoints}" fill="none" stroke="#77866a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+        ${dots}
+        ${lastLabel}
+      </svg>
+    `;
+    dom.weightChart.setAttribute(
+      "aria-label",
+      `最近 30 天体重曲线，从 ${formatWeight(first.weight)} kg 到 ${formatWeight(last.weight)} kg，共记录 ${points.length} 天。`,
+    );
   }
 
   function renderWellness() {
@@ -1862,10 +1983,11 @@
     renderWellnessDays(dates);
     renderWellnessSummary(dates);
 
-    const day = state.wellnessDays?.[state.wellnessDate] || { sleep: null, exercise: null };
+    const day = state.wellnessDays?.[state.wellnessDate] || { sleep: null, exercise: null, weight: null };
     dom.sleepBedtime.value = day.sleep?.bedtime || "";
     dom.sleepWake.value = day.sleep?.wakeTime || "";
     dom.exerciseCalories.value = day.exercise ? String(day.exercise.calories) : "";
+    dom.weightInput.value = day.weight ? formatWeight(day.weight.weight) : "";
     updateSleepDurationPreview();
     dom.sleepHint.textContent = day.sleep
       ? `已记录 ${day.sleep.bedtime} 入睡 · ${day.sleep.wakeTime} 起床。`
@@ -1873,6 +1995,11 @@
     dom.exerciseHint.textContent = day.exercise
       ? `已记录 ${formatNumber(day.exercise.calories)} kcal，可随时修改。`
       : "记录运动消耗，不改变食谱里的摄入热量。";
+    dom.weightDateLabel.textContent = `记录 ${formatDayLong(state.wellnessDate)} 的体重。`;
+    dom.weightHint.textContent = day.weight
+      ? `已记录 ${formatWeight(day.weight.weight)} kg，可随时修改。`
+      : "每天记录一次，曲线会按日期连接。";
+    renderWeightChart();
   }
 
   async function loadWellness({ force = false } = {}) {
@@ -1892,6 +2019,7 @@
       const data = await api(`/api/wellness?weekStart=${encodeURIComponent(weekStart)}`);
       if (state.wellnessWeekStart !== weekStart) return;
       state.wellnessDays = data.days || {};
+      state.weightTrend = data.weightTrend || null;
       state.wellnessLoading = false;
       renderWellness();
     } catch (error) {
@@ -1966,6 +2094,38 @@
     } finally {
       dom.saveExercise.disabled = false;
       dom.saveExercise.innerHTML = original;
+    }
+  }
+
+  async function saveWellnessWeight() {
+    if (!state.user) return;
+    const raw = dom.weightInput.value.trim();
+    const weight = Number(raw);
+    if (!raw || !Number.isFinite(weight) || weight < 20 || weight > 300) {
+      showToast("请输入 20–300 kg 之间的体重。");
+      return;
+    }
+    dom.saveWeight.disabled = true;
+    const original = dom.saveWeight.innerHTML;
+    dom.saveWeight.textContent = "保存中…";
+    try {
+      const data = await api("/api/wellness/weight", {
+        method: "PUT",
+        body: {
+          date: state.wellnessDate,
+          weekStart: state.wellnessWeekStart,
+          weight,
+        },
+      });
+      state.wellnessDays = data.days || {};
+      state.weightTrend = data.weightTrend || state.weightTrend;
+      renderWellness();
+      showToast("体重已记录。");
+    } catch (error) {
+      showToast(error.message);
+    } finally {
+      dom.saveWeight.disabled = false;
+      dom.saveWeight.innerHTML = original;
     }
   }
 
@@ -4340,6 +4500,13 @@
     dom.exerciseQuick = id("exerciseQuick");
     dom.saveExercise = id("saveExercise");
     dom.exerciseHint = id("exerciseHint");
+    dom.weightInput = id("weightInput");
+    dom.weightDateLabel = id("weightDateLabel");
+    dom.weightLatest = id("weightLatest");
+    dom.weightStats = id("weightStats");
+    dom.weightChart = id("weightChart");
+    dom.weightHint = id("weightHint");
+    dom.saveWeight = id("saveWeight");
     dom.wellnessSummary = id("wellnessSummary");
 
     dom.heroWeekNo = id("heroWeekNo");
@@ -4833,6 +5000,13 @@
       }, 120);
     });
 
+    let weightChartResizeTimer = 0;
+    window.addEventListener("resize", () => {
+      if (state.view !== "wellness") return;
+      clearTimeout(weightChartResizeTimer);
+      weightChartResizeTimer = setTimeout(renderWeightChart, 140);
+    });
+
     dom.bulkIngredientButton.addEventListener("click", () => {
       if (state.ingredientBulkMode) exitIngredientBulkMode();
       else enterIngredientBulkMode();
@@ -4857,6 +5031,7 @@
     dom.sleepWake.addEventListener("input", updateSleepDurationPreview);
     dom.saveSleep.addEventListener("click", saveWellnessSleep);
     dom.saveExercise.addEventListener("click", saveWellnessExercise);
+    dom.saveWeight.addEventListener("click", saveWellnessWeight);
     dom.exerciseQuick.addEventListener("click", (event) => {
       const button = event.target.closest("[data-exercise-quick]");
       if (!button) return;

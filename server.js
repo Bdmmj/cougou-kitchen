@@ -154,6 +154,15 @@ db.exec(`
     PRIMARY KEY (user_id, date)
   );
 
+  CREATE TABLE IF NOT EXISTS weight_logs (
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    date TEXT NOT NULL,
+    weight REAL NOT NULL CHECK (weight >= 20 AND weight <= 300),
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (user_id, date)
+  );
+
   CREATE TABLE IF NOT EXISTS week_templates (
     id TEXT PRIMARY KEY,
     kitchen_id TEXT NOT NULL REFERENCES kitchens(id) ON DELETE CASCADE,
@@ -2778,12 +2787,20 @@ function getWellnessWeek(userId, weekStart) {
        WHERE user_id = ? AND date >= ? AND date <= ?`,
     )
     .all(userId, dates[0], dates[6]);
+  const weightRows = db
+    .prepare(
+      `SELECT date, weight, updated_at FROM weight_logs
+       WHERE user_id = ? AND date >= ? AND date <= ?`,
+    )
+    .all(userId, dates[0], dates[6]);
   const sleepByDate = new Map(sleepRows.map((row) => [row.date, row]));
   const exerciseByDate = new Map(exerciseRows.map((row) => [row.date, row]));
+  const weightByDate = new Map(weightRows.map((row) => [row.date, row]));
   const days = {};
   dates.forEach((date) => {
     const sleep = sleepByDate.get(date);
     const exercise = exerciseByDate.get(date);
+    const weight = weightByDate.get(date);
     days[date] = {
       sleep: sleep
         ? {
@@ -2797,9 +2814,32 @@ function getWellnessWeek(userId, weekStart) {
       exercise: exercise
         ? { date: exercise.date, calories: exercise.calories, updatedAt: exercise.updated_at }
         : null,
+      weight: weight
+        ? { date: weight.date, weight: Number(weight.weight), updatedAt: weight.updated_at }
+        : null,
     };
   });
-  return { weekStart, days };
+
+  const today = new Date();
+  const rangeEnd = dateKey(today);
+  const rangeStart = dateKey(addDays(today, -29));
+  const trendRows = db
+    .prepare(
+      `SELECT date, weight FROM weight_logs
+       WHERE user_id = ? AND date >= ? AND date <= ?
+       ORDER BY date ASC`,
+    )
+    .all(userId, rangeStart, rangeEnd);
+
+  return {
+    weekStart,
+    days,
+    weightTrend: {
+      rangeStart,
+      rangeEnd,
+      points: trendRows.map((row) => ({ date: row.date, weight: Number(row.weight) })),
+    },
+  };
 }
 
 async function handleGetWellness(req, res, user, url) {
@@ -2854,6 +2894,30 @@ async function handleSaveExercise(req, res, user) {
        calories = excluded.calories,
        updated_at = excluded.updated_at`,
   ).run(user.id, date, Math.round(calories), now, now);
+  sendJson(res, 200, getWellnessWeek(user.id, weekStart));
+}
+
+async function handleSaveWeight(req, res, user) {
+  if (!user) throw new HttpError(401, "请先登录。");
+  const body = await readJsonBody(req);
+  const date = String(body.date || "");
+  const weight = Number(body.weight);
+  if (!parseDateKey(date)) throw new HttpError(400, "日期格式不正确。");
+  if (!Number.isFinite(weight) || weight < 20 || weight > 300) {
+    throw new HttpError(400, "体重需要在 20–300 kg 之间。");
+  }
+  const normalized = Math.round(weight * 10) / 10;
+  const weekStart = normalizeWeekStart(body.weekStart || dateKey(startOfWeek(parseDateKey(date))));
+  if (!weekDateKeys(weekStart).includes(date)) throw new HttpError(400, "日期不在当前周内。");
+
+  const now = nowISO();
+  db.prepare(
+    `INSERT INTO weight_logs (user_id, date, weight, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT(user_id, date) DO UPDATE SET
+       weight = excluded.weight,
+       updated_at = excluded.updated_at`,
+  ).run(user.id, date, normalized, now, now);
   sendJson(res, 200, getWellnessWeek(user.id, weekStart));
 }
 
@@ -3217,6 +3281,10 @@ async function handleApi(req, res, url) {
 
   if (pathname === "/api/wellness/exercise" && method === "PUT") {
     return handleSaveExercise(req, res, user);
+  }
+
+  if (pathname === "/api/wellness/weight" && method === "PUT") {
+    return handleSaveWeight(req, res, user);
   }
 
   if (pathname.startsWith("/api/admin/")) {
